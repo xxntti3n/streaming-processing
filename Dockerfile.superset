@@ -1,0 +1,9 @@
+# Superset with Trino driver for Iceberg charts
+FROM apache/superset:3.1.0
+USER root
+RUN pip install --no-cache-dir "trino[sqlalchemy]"
+COPY superset/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+COPY superset/add_trino_db.py /app/add_trino_db.py
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+USER superset
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
