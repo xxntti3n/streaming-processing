@@ -1,0 +1,288 @@
+# config/resources.yaml
+# Resource presets for different environments and use cases
+
+presets:
+  barebones:
+    description: "CDC + Streaming only (no BI, minimal storage)"
+    total:
+      cpu: "1.5"
+      memory: "2GB"
+    spark:
+      executorInstances: 1
+      executorMemory: "512m"
+      executorCores: "1"
+      driverMemory: "512m"
+      driverCores: "1"
+      sqlServerEnabled: false
+    kafka:
+      replicas: 1
+      storage: "1Gi"
+      resources:
+        requests:
+          cpu: "200m"
+          memory: "256Mi"
+        limits:
+          cpu: "500m"
+          memory: "512Mi"
+    zookeeper:
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "128Mi"
+        limits:
+          cpu: "200m"
+          memory: "256Mi"
+    kafkaConnect:
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "192Mi"
+        limits:
+          cpu: "300m"
+          memory: "384Mi"
+    mysql:
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "128Mi"
+        limits:
+          cpu: "300m"
+          memory: "256Mi"
+    lakekeeper:
+      resources:
+        requests:
+          cpu: "50m"
+          memory: "128Mi"
+        limits:
+          cpu: "150m"
+          memory: "256Mi"
+    minio:
+      storage: "2Gi"
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "128Mi"
+        limits:
+          cpu: "300m"
+          memory: "256Mi"
+    superset:
+      enabled: false
+
+  minimal:
+    description: "Full stack, single executor"
+    total:
+      cpu: "2.4"
+      memory: "4.5GB"
+    spark:
+      executorInstances: 1
+      executorMemory: "1g"
+      executorCores: "1"
+      driverMemory: "1g"
+      driverCores: "1"
+      sqlServerEnabled: true
+    kafka:
+      replicas: 1
+      storage: "2Gi"
+      resources:
+        requests:
+          cpu: "300m"
+          memory: "512Mi"
+        limits:
+          cpu: "800m"
+          memory: "1Gi"
+    zookeeper:
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "256Mi"
+        limits:
+          cpu: "200m"
+          memory: "512Mi"
+    kafkaConnect:
+      resources:
+        requests:
+          cpu: "200m"
+          memory: "384Mi"
+        limits:
+          cpu: "500m"
+          memory: "768Mi"
+    mysql:
+      resources:
+        requests:
+          cpu: "200m"
+          memory: "256Mi"
+        limits:
+          cpu: "500m"
+          memory: "512Mi"
+    lakekeeper:
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "256Mi"
+        limits:
+          cpu: "300m"
+          memory: "512Mi"
+    minio:
+      storage: "5Gi"
+      resources:
+        requests:
+          cpu: "200m"
+          memory: "256Mi"
+        limits:
+          cpu: "500m"
+          memory: "512Mi"
+    superset:
+      enabled: true
+      resources:
+        requests:
+          cpu: "300m"
+          memory: "512Mi"
+        limits:
+          cpu: "800m"
+          memory: "1Gi"
+
+  default:
+    description: "Comfortable local development"
+    total:
+      cpu: "3.5"
+      memory: "6GB"
+    spark:
+      executorInstances: 1
+      executorMemory: "2g"
+      executorCores: "2"
+      driverMemory: "2g"
+      driverCores: "1"
+      sqlServerEnabled: true
+    kafka:
+      replicas: 1
+      storage: "5Gi"
+      resources:
+        requests:
+          cpu: "500m"
+          memory: "768Mi"
+        limits:
+          cpu: "1"
+          memory: "1.5Gi"
+    zookeeper:
+      resources:
+        requests:
+          cpu: "200m"
+          memory: "384Mi"
+        limits:
+          cpu: "400m"
+          memory: "768Mi"
+    kafkaConnect:
+      resources:
+        requests:
+          cpu: "300m"
+          memory: "512Mi"
+        limits:
+          cpu: "700m"
+          memory: "1Gi"
+    mysql:
+      resources:
+        requests:
+          cpu: "300m"
+          memory: "384Mi"
+        limits:
+          cpu: "700m"
+          memory: "768Mi"
+    lakekeeper:
+      resources:
+        requests:
+          cpu: "200m"
+          memory: "384Mi"
+        limits:
+          cpu: "500m"
+          memory: "768Mi"
+    minio:
+      storage: "10Gi"
+      resources:
+        requests:
+          cpu: "300m"
+          memory: "384Mi"
+        limits:
+          cpu: "700m"
+          memory: "768Mi"
+    superset:
+      enabled: true
+      resources:
+        requests:
+          cpu: "500m"
+          memory: "768Mi"
+        limits:
+          cpu: "1"
+          memory: "1.5Gi"
+
+  performance:
+    description: "Production-like testing"
+    total:
+      cpu: "6+"
+      memory: "10GB+"
+    spark:
+      executorInstances: 2
+      executorMemory: "2g"
+      executorCores: "2"
+      driverMemory: "2g"
+      driverCores: "1"
+      sqlServerEnabled: true
+    kafka:
+      replicas: 2
+      storage: "10Gi"
+      resources:
+        requests:
+          cpu: "1"
+          memory: "1Gi"
+        limits:
+          cpu: "2"
+          memory: "2Gi"
+    zookeeper:
+      resources:
+        requests:
+          cpu: "300m"
+          memory: "512Mi"
+        limits:
+          cpu: "600m"
+          memory: "1Gi"
+    kafkaConnect:
+      resources:
+        requests:
+          cpu: "500m"
+          memory: "768Mi"
+        limits:
+          cpu: "1"
+          memory: "1.5Gi"
+    mysql:
+      resources:
+        requests:
+          cpu: "500m"
+          memory: "768Mi"
+        limits:
+          cpu: "1"
+          memory: "1.5Gi"
+    lakekeeper:
+      resources:
+        requests:
+          cpu: "300m"
+          memory: "512Mi"
+        limits:
+          cpu: "700m"
+          memory: "1Gi"
+    minio:
+      storage: "20Gi"
+      resources:
+        requests:
+          cpu: "500m"
+          memory: "768Mi"
+        limits:
+          cpu: "1"
+          memory: "1.5Gi"
+    superset:
+      enabled: true
+      resources:
+        requests:
+          cpu: "700m"
+          memory: "1Gi"
+        limits:
+          cpu: "1.5"
+          memory: "2Gi"
