@@ -1,0 +1,70 @@
+# helm/lakekeeper/values.yaml
+
+replicaCount: 1
+
+image:
+  repository: lakekeeper/lakekeeper
+  tag: "0.5.0"
+  pullPolicy: IfNotPresent
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 8181
+
+# Storage backend (uses MinIO)
+storage:
+  type: s3
+  s3:
+    endpoint: http://minio:9000
+    accessKey: minio
+    secretKey: minio123
+    pathStyleAccess: true
+    bucket: iceberg
+    prefix: warehouse/
+
+# Catalog configuration
+catalog:
+  name: lakekeeper
+  warehouse: s3://iceberg/warehouse
+
+# Resources
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 300m
+    memory: 512Mi
+
+# Environment variables
+env:
+  - name: LAKEKEEPER_LOG_LEVEL
+    value: INFO
+  - name: LAKEKEEPER__CATALOG__WAREHOUSE
+    value: s3://iceberg/warehouse
+  - name: LAKEKEEPER__STORAGE__TYPE
+    value: s3
+  - name: LAKEKEEPER__STORAGE__S3__ENDPOINT
+    value: http://minio:9000
+  - name: LAKEKEEPER__STORAGE__S3__ACCESS_KEY
+    value: minio
+  - name: LAKEKEEPER__STORAGE__S3__SECRET_KEY
+    value: minio123
+  - name: LAKEKEEPER__STORAGE__S3__PATH_STYLE_ACCESS
+    value: "true"
+
+# Health check
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8181
+  initialDelaySeconds: 10
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8181
+  initialDelaySeconds: 5
+  periodSeconds: 5
