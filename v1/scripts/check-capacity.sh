@@ -2,6 +2,14 @@
 # scripts/check-capacity.sh
 # Check system resources and recommend preset
 
+# Check for bc dependency
+if ! command -v bc &> /dev/null; then
+    echo "Error: 'bc' is required but not installed."
+    echo "  On macOS: brew install bc"
+    echo "  On Linux: apt-get install bc or yum install bc"
+    exit 1
+fi
+
 echo "=== System Resource Check ==="
 echo ""
 
