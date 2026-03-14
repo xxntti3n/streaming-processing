@@ -71,12 +71,27 @@ helm repo add lakekeeper https://lakekeeper.io/charts 2>/dev/null || true
 
 echo -e "${GREEN}✓ Repositories updated${NC}"
 
+# Validate chart directory exists
+if [[ ! -d "$PROJECT_ROOT/helm/streaming-stack" ]]; then
+  echo -e "${RED}Error: Chart directory not found: $PROJECT_ROOT/helm/streaming-stack${NC}"
+  echo "Please complete the Helm chart setup first (see implementation plan)"
+  exit 1
+fi
+
+# Validate values file exists
+VALUES_FILE="$PROJECT_ROOT/helm/streaming-stack/values-${PRESET}.yaml"
+if [[ ! -f "$VALUES_FILE" ]]; then
+  echo -e "${RED}Error: Values file not found: $VALUES_FILE${NC}"
+  echo "Available presets: barebones, minimal, default, performance"
+  exit 1
+fi
+
 # Deploy main chart
 echo ""
 echo -e "${YELLOW}Deploying streaming-stack...${NC}"
 helm upgrade --install streaming-stack "$PROJECT_ROOT/helm/streaming-stack" \
   --namespace "$NAMESPACE" \
-  --values "$PROJECT_ROOT/helm/streaming-stack/values-${PRESET}.yaml" \
+  --values "$VALUES_FILE" \
   --wait --timeout 10m
 
 echo ""
