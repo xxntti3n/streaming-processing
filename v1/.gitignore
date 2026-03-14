@@ -1,22 +1,3 @@
-# Python
-__pycache__/
-*.pyc
-.venv/
-venv/
-
-# Docker
-*.log
-
-# Environment
-.env
-
-# IDE
-.idea/
-.vscode/
-
-# Data
-data/
-
 # Spark builds
 spark-jobs/*/target/
 spark-jobs/*/project/target/
