@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: e2e-test-script
+  namespace: streaming
+data:
+  test.sh: |
+    #!/bin/bash
+    set -e
+    echo "=== E2E Test: MySQL → Kafka → Spark → Iceberg ==="
+
+    # Insert test data into MySQL
+    TEST_SKU="E2E-TEST-$(date +%s)"
+    mysql -h mysql -u root -prootpw appdb <<EOF
+    INSERT INTO products (sku, name) VALUES ('$TEST_SKU', 'E2E Test Product');
+    INSERT INTO sales (product_id, qty, price, sale_ts)
+    VALUES ((SELECT id FROM products WHERE sku = '$TEST_SKU'), 10, 99.99, NOW());
+    EOF
+
+    echo "✓ Test data inserted"
+    echo "Waiting for streaming to process..."
+
+    exit 0

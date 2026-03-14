@@ -1,0 +1,6 @@
+# Scala build artifacts
+target/
+project/
+
+# Docker
+*.jar
