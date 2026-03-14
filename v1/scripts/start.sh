@@ -102,4 +102,7 @@ echo "  Spark UI:      kubectl port-forward -n $NAMESPACE svc/spark-ui 4040:4040
 echo "  MinIO Console: kubectl port-forward -n $NAMESPACE svc/minio 9001:9001"
 echo "  Superset:      kubectl port-forward -n $NAMESPACE svc/superset 8088:8088"
 echo ""
-echo "Run './scripts/verify-stack.sh' to check deployment health"
+echo "Check deployment status:"
+echo "  kubectl get pods -n $NAMESPACE"
+echo ""
+echo "Note: Full verification script (scripts/verify-stack.sh) will be available after completing all implementation tasks."
