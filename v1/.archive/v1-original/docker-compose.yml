@@ -1,0 +1,123 @@
+# End-to-end streaming: MySQL CDC → Flink (join + aggregate) → Iceberg → Trino
+# Container names prefixed to avoid conflict with other stacks (e.g. dlt-iceberg)
+services:
+  minio:
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    container_name: streaming-minio
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio123
+    command: server /data --console-address ":9001"
+    ports: ["9000:9000", "9001:9001"]
+    volumes: [ "minio-data:/data" ]
+
+  mc:
+    image: quay.io/minio/mc:latest
+    container_name: streaming-mc
+    depends_on:
+      - minio
+    entrypoint: ["/bin/sh", "/create-bucket.sh"]
+    volumes:
+      - ./minio/create-bucket.sh:/create-bucket.sh:ro
+
+  mysql:
+    image: mysql:8.0
+    container_name: streaming-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpw
+    command: >
+      --server-id=1 --log-bin=mysql-bin --binlog_format=ROW --binlog_row_image=FULL
+      --gtid_mode=ON --enforce_gtid_consistency=ON
+      --default_authentication_plugin=mysql_native_password
+    ports: ["3306:3306"]
+    volumes:
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+
+  jobmanager:
+    build: .
+    container_name: streaming-jobmanager
+    environment:
+      - JOB_MANAGER_RPC_ADDRESS=jobmanager
+      - AWS_REGION=us-east-1
+    command: jobmanager
+    ports: ["8081:8081"]
+    volumes:
+      - ./jobs/cdc_join_aggregate_to_iceberg.sql:/opt/flink/job.sql:ro
+    depends_on:
+      - mysql
+      - minio
+
+  taskmanager:
+    build: .
+    # no container_name (2 replicas get auto names)
+    environment:
+      - JOB_MANAGER_RPC_ADDRESS=jobmanager
+      - AWS_REGION=us-east-1
+    command: taskmanager
+    depends_on:
+      - jobmanager
+      - mysql
+      - minio
+    deploy:
+      replicas: 2
+
+  trino:
+    image: trinodb/trino:477
+    container_name: streaming-trino
+    ports: ["8080:8080"]
+    environment:
+      - AWS_ACCESS_KEY_ID=minio
+      - AWS_SECRET_ACCESS_KEY=minio123
+      - AWS_REGION=us-east-1
+      - S3_ENDPOINT=http://minio:9000
+      - S3_PATH_STYLE_ACCESS=true
+    volumes:
+      - ./trino/etc/catalog:/etc/trino/catalog:ro
+      - ./trino/etc/config.properties:/etc/trino/config.properties:ro
+      - ./trino/lib/mysql-connector-j-8.4.0.jar:/usr/lib/trino/plugin/iceberg/mysql-connector-j-8.4.0.jar:ro
+      - trino-cache:/tmp/trino-cache
+    depends_on:
+      - minio
+      - mysql
+
+  mysql-data-inserter:
+    build:
+      context: .
+      dockerfile: Dockerfile.cron
+    container_name: streaming-mysql-data-inserter
+    environment:
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_USER=root
+      - MYSQL_PASSWORD=rootpw
+      - DATABASE=appdb
+    depends_on:
+      - mysql
+    restart: unless-stopped
+
+  superset:
+    build:
+      context: .
+      dockerfile: Dockerfile.superset
+    image: streaming-processing-superset
+    container_name: streaming-superset
+    ports: ["8088:8088"]
+    environment:
+      SUPERSET_SECRET_KEY: "streaming-superset-secret-key-change-in-prod"
+      ADMIN_USERNAME: admin
+      ADMIN_FIRST_NAME: Admin
+      ADMIN_LAST_NAME: User
+      ADMIN_EMAIL: admin@example.com
+      ADMIN_PASSWORD: admin
+      SUPERSET_LOAD_EXAMPLES: "no"
+      SUPERSET_PORT: "8088"
+      SUPERSET_BIND_ADDRESS: "0.0.0.0"
+      GUNICORN_CMD_ARGS: "--bind 0.0.0.0:8088 --workers 2 --timeout 120 --keep-alive 2"
+      FLASK_APP: "superset.app:create_app()"
+    depends_on:
+      - trino
+    restart: unless-stopped
+
+volumes:
+  minio-data:
+  trino-cache:
