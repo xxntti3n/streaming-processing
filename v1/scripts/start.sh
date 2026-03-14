@@ -53,7 +53,7 @@ echo -e "${GREEN}✓ Cluster connected${NC}"
 # Create namespace if it doesn't exist
 echo ""
 echo -e "${YELLOW}Creating namespace '$NAMESPACE'...${NC}"
-kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f - || true
 
 # Add Helm repositories
 echo ""
