@@ -1,0 +1,31 @@
+# helm/streaming-stack/values-performance.yaml
+
+mysql:
+  enabled: true
+
+minio:
+  enabled: true
+  persistence:
+    size: 20Gi
+
+kafka:
+  enabled: true
+  kafka:
+    replicaCount: 2
+
+lakekeeper:
+  enabled: true
+
+spark:
+  enabled: true
+  streamingJob:
+    driver:
+      memory: 2g
+    executor:
+      instances: 2
+      memory: 2g
+  thriftServer:
+    enabled: true
+
+superset:
+  enabled: true

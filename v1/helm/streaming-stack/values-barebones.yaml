@@ -1,0 +1,25 @@
+# helm/streaming-stack/values-barebones.yaml
+
+mysql:
+  enabled: true
+
+minio:
+  enabled: true
+  persistence:
+    size: 2Gi
+
+kafka:
+  enabled: true
+
+lakekeeper:
+  enabled: true
+
+spark:
+  enabled: true
+  streamingJob:
+    enabled: true
+  thriftServer:
+    enabled: false
+
+superset:
+  enabled: false

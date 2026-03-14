@@ -1,0 +1,23 @@
+# helm/streaming-stack/values.yaml
+# Base configuration - minimal preset by default
+
+global:
+  namespace: streaming
+
+mysql:
+  enabled: true
+
+minio:
+  enabled: true
+
+kafka:
+  enabled: true
+
+lakekeeper:
+  enabled: true
+
+spark:
+  enabled: true
+
+superset:
+  enabled: false

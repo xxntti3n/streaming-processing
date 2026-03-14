@@ -1,0 +1,43 @@
+# helm/spark/jobs/thrift-server.yaml
+apiVersion: sparkoperator.k8s.io/v1beta2
+kind: SparkApplication
+metadata:
+  name: spark-thrift-server
+  namespace: streaming
+spec:
+  type: Scala
+  sparkVersion: "3.5.0"
+  mode: cluster
+  image: apache/spark:3.5.0
+  imagePullPolicy: IfNotPresent
+  command: ["/opt/spark/sbin/start-thriftserver.sh"]
+
+  sparkConf:
+    spark.hive.server.server2.thrift.port: "10000"
+    spark.hive.server.server2.thrift.bind.host: "0.0.0.0"
+
+    # Iceberg catalog
+    spark.sql.catalog.lakekeeper: org.apache.iceberg.spark.SparkCatalog
+    spark.sql.catalog.lakekeeper.type: rest
+    spark.sql.catalog.lakekeeper.uri: http://lakekeeper:8181
+    spark.sql.catalog.lakekeeper.warehouse: s3://iceberg/warehouse
+    spark.sql.catalog.lakekeeper.io-impl: org.apache.iceberg.aws.s3.S3FileIO
+    spark.sql.catalog.lakekeeper.s3.endpoint: http://minio:9000
+    spark.sql.catalog.lakekeeper.s3.access-key-id: minio
+    spark.sql.catalog.lakekeeper.s3.secret-access-key: minio123
+    spark.sql.catalog.lakekeeper.s3.path-style-access: "true"
+
+  driver:
+    cores: 1
+    coreLimit: "1"
+    memory: "1g"
+    serviceAccount: spark
+  executor:
+    cores: 1
+    instances: 1
+    memory: "1g"
+
+  deps:
+    jars:
+      - local:///opt/spark/jars/iceberg-spark-runtime-3.5_2.12-1.5.0.jar
+      - local:///opt/spark/jars/aws-java-sdk-bundle-1.12.666.jar

@@ -1,0 +1,27 @@
+apiVersion: v2
+name: streaming-stack
+description: Umbrella chart for streaming processing with Spark
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+
+dependencies:
+  - name: mysql
+    version: 0.1.0
+    repository: file://../mysql
+  - name: minio
+    version: 0.1.0
+    repository: file://../minio
+  - name: kafka
+    version: 0.1.0
+    repository: file://../kafka
+  - name: lakekeeper
+    version: 0.1.0
+    repository: file://../lakekeeper
+  - name: spark
+    version: 0.1.0
+    repository: file://../spark
+  - name: superset
+    version: 0.1.0
+    repository: file://../superset
+    condition: superset.enabled

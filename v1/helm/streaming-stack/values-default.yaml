@@ -1,0 +1,25 @@
+# helm/streaming-stack/values-default.yaml
+
+mysql:
+  enabled: true
+
+minio:
+  enabled: true
+  persistence:
+    size: 10Gi
+
+kafka:
+  enabled: true
+
+lakekeeper:
+  enabled: true
+
+spark:
+  enabled: true
+  streamingJob:
+    enabled: true
+  thriftServer:
+    enabled: true
+
+superset:
+  enabled: true
