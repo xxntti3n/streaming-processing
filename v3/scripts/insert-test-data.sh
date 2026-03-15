@@ -33,45 +33,48 @@ echo ""
 echo "Inserting test customers..."
 echo ""
 
-# Insert test customers
+# Insert test customers using gcloud spanner rows insert
 for i in {1..5}; do
     echo "Inserting customer $i..."
-    # Using spanner-cli or direct gcloud command would go here
-    # For now, this is a placeholder showing what data would be inserted
-    echo "  Customer ID: $i"
-    echo "  Email: customer$i@example.com"
-    echo "  Name: Customer $i"
+    gcloud spanner rows insert \
+        --instance="$INSTANCE_ID" \
+        --database="$DATABASE_ID" \
+        --table="customers" \
+        --data=customer_id="$i",email="customer$i@example.com",name="Customer $i" \
+        --project="$PROJECT_ID" 2>/dev/null && echo "  Successfully inserted customer $i" || echo "  Warning: Failed to insert customer $i (may already exist)"
 done
 
 echo ""
 echo "Inserting test products..."
 echo ""
 
+# Insert test products
 for i in {1..5}; do
     echo "Inserting product $i..."
-    echo "  Product ID: $i"
-    echo "  SKU: PROD-00$i"
-    echo "  Name: Product $i"
-    echo "  Price: $((i * 10)).00"
+    gcloud spanner rows insert \
+        --instance="$INSTANCE_ID" \
+        --database="$DATABASE_ID" \
+        --table="products" \
+        --data=product_id="$i",sku="PROD-00$i",name="Product $i",price=$((i * 10)).00 \
+        --project="$PROJECT_ID" 2>/dev/null && echo "  Successfully inserted product $i" || echo "  Warning: Failed to insert product $i (may already exist)"
 done
 
 echo ""
 echo "Inserting test orders..."
 echo ""
 
+# Insert test orders
 for i in {1..3}; do
     echo "Inserting order $i..."
-    echo "  Order ID: $i"
-    echo "  Customer ID: $i"
-    echo "  Product ID: $i"
-    echo "  Quantity: $((i * 2))"
-    echo "  Status: PENDING"
+    gcloud spanner rows insert \
+        --instance="$INSTANCE_ID" \
+        --database="$DATABASE_ID" \
+        --table="orders" \
+        --data=order_id="$i",customer_id="$i",product_id="$i",quantity=$((i * 2)),status="PENDING" \
+        --project="$PROJECT_ID" 2>/dev/null && echo "  Successfully inserted order $i" || echo "  Warning: Failed to insert order $i (may already exist)"
 done
 
 echo ""
 echo "=================================================="
 echo "Test Data Insertion Complete!"
 echo "=================================================="
-echo ""
-echo "Note: This script shows what data would be inserted."
-echo "To actually insert data, use gcloud spanner rows insert or spanner-cli"
