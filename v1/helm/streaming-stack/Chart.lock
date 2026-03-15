@@ -1,21 +1,12 @@
 dependencies:
 - name: mysql
-  repository: file://../mysql
-  version: 0.1.0
+  repository: https://charts.bitnami.com/bitnami
+  version: 12.3.5
 - name: minio
-  repository: file://../minio
-  version: 0.1.0
+  repository: https://charts.bitnami.com/bitnami
+  version: 14.10.5
 - name: kafka
-  repository: file://../kafka
-  version: 0.1.0
-- name: lakekeeper
-  repository: file://../lakekeeper
-  version: 0.1.0
-- name: spark
-  repository: file://../spark
-  version: 0.1.0
-- name: superset
-  repository: file://../superset
-  version: 0.1.0
-digest: sha256:2f9172a55889b982e2c89814260980b86b5f5ae9152d0ee291af86cb1923ebba
-generated: "2026-03-14T17:17:15.891702+07:00"
+  repository: https://charts.bitnami.com/bitnami
+  version: 30.1.8
+digest: sha256:ea2afda4b79cc19705be82d1a7a8629902e075d7ef318e3c5f48f4073481bc53
+generated: "2026-03-15T16:01:19.31004+07:00"

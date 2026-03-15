@@ -1,0 +1,14 @@
+com/example/streaming/SpannerCdcPipeline.class
+com/example/streaming/source/ModType.class
+com/example/streaming/model/Product.class
+com/example/streaming/source/SpannerChangeStreamSource$1.class
+com/example/streaming/sink/BigQueryClient$Builder.class
+com/example/streaming/model/Order.class
+com/example/streaming/source/SpannerChangeStreamSource.class
+com/example/streaming/sink/BigQueryClient.class
+com/example/streaming/source/SourceState.class
+com/example/streaming/model/Customer.class
+com/example/streaming/sink/BigQueryUpsertSink$1.class
+com/example/streaming/sink/BigQueryUpsertSink.class
+com/example/streaming/routing/TableRouterFunction.class
+com/example/streaming/source/ChangeRecord.class
