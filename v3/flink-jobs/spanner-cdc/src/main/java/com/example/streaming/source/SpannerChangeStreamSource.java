@@ -46,7 +46,7 @@ public class SpannerChangeStreamSource extends RichSourceFunction<ChangeRecord>
     public void open(Configuration parameters) {
         // Initialize Spanner client for emulator
         // For emulator, we need to use the setHost() with just the host:port
-        String spannerHost = System.getenv().getOrDefault("SPANNER_HOST", "spanner-emulator:9010");
+        String spannerHost = System.getenv().getOrDefault("SPANNER_EMULATOR_HOST", "spanner-emulator:9010");
         SpannerOptions options = SpannerOptions.newBuilder()
             .setProjectId("test-project")
             .setHost(spannerHost)
