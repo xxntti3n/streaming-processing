@@ -272,12 +272,12 @@ public class SpannerChangeStreamSource extends RichSourceFunction<ChangeRecord>
                 }
 
                 // Update the change stream token to the latest processed timestamp
-                // Use endTimestamp to ensure we don't miss any records
+                // Use latestTimestamp (last record's commit timestamp) to avoid duplicate processing
                 if (recordCount > 0 || endTimestamp != null) {
-                    state.setChangeStreamToken(endTimestamp.toString());
+                    state.setChangeStreamToken(latestTimestamp.toString());
                     state.setLastCommitTimestamp(new java.sql.Timestamp(System.currentTimeMillis()));
                     LOG.info("Processed {} change stream records, updated token to {}",
-                        recordCount, endTimestamp);
+                        recordCount, latestTimestamp);
                 }
 
             } catch (Exception e) {
