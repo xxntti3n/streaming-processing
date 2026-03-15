@@ -10,6 +10,8 @@ import org.apache.flink.runtime.state.FunctionInitializationContext;
 import org.apache.flink.runtime.state.FunctionSnapshotContext;
 import org.apache.flink.streaming.api.checkpoint.CheckpointedFunction;
 import org.apache.flink.streaming.api.functions.source.RichSourceFunction;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.concurrent.TimeUnit;
@@ -20,6 +22,8 @@ import java.util.concurrent.TimeUnit;
  */
 public class SpannerChangeStreamSource extends RichSourceFunction<ChangeRecord>
         implements CheckpointedFunction {
+
+    private static final Logger LOG = LoggerFactory.getLogger(SpannerChangeStreamSource.class);
 
     private final String instanceId;
     private final String databaseId;
@@ -79,8 +83,7 @@ public class SpannerChangeStreamSource extends RichSourceFunction<ChangeRecord>
                 Thread.currentThread().interrupt();
                 break;
             } catch (Exception e) {
-                System.err.println("Error in source: " + e.getMessage());
-                e.printStackTrace();
+                LOG.error("Error in source", e);
             }
         }
     }
@@ -123,7 +126,7 @@ public class SpannerChangeStreamSource extends RichSourceFunction<ChangeRecord>
                 rowCount++;
             }
         } catch (Exception e) {
-            System.err.println("Error snapshotting table " + table + ": " + e.getMessage());
+            LOG.error("Error snapshotting table {}: {}", table, e.getMessage(), e);
             // Continue with other tables even if one fails
         }
 
@@ -248,8 +251,15 @@ public class SpannerChangeStreamSource extends RichSourceFunction<ChangeRecord>
      * Fallback method to extract row data from ResultSet using column metadata.
      * Returns a Struct built from the current ResultSet row data.
      * This method iterates through columns using their type information.
+     *
+     * Note: Column names are generated as "col_0", "col_1", etc. since Spanner
+     * ResultSet API doesn't easily provide column names by index in this context.
      */
     private Struct extractRowFromResultSet(ResultSet rs) {
+        // Safety limit to prevent infinite loops
+        final int maxColumns = 1000;
+        int columnIndex = 0;
+
         try {
             // Use Struct.Builder to build the result
             Struct.Builder structBuilder = Struct.newBuilder();
@@ -257,8 +267,7 @@ public class SpannerChangeStreamSource extends RichSourceFunction<ChangeRecord>
             // Spanner ResultSet provides metadata about columns
             // We need to iterate and find all valid column indices
             // The ResultSet doesn't provide column count directly, so we iterate
-            int columnIndex = 0;
-            while (true) {
+            while (columnIndex < maxColumns) {
                 try {
                     // Try to get the column type - this will throw if index is invalid
                     Type columnType = rs.getColumnType(columnIndex);
@@ -266,26 +275,29 @@ public class SpannerChangeStreamSource extends RichSourceFunction<ChangeRecord>
                     // Generate a column name (Spanner ResultSet API doesn't easily provide names by index)
                     String columnName = "col_" + columnIndex;
 
-                    // Check if null and skip if so
-                    if (!rs.isNull(columnIndex)) {
-                        // Extract value based on type and add to struct builder
-                        addValueToStructBuilder(structBuilder, columnName, rs, columnIndex, columnType);
-                    }
+                    // Extract value based on type and add to struct builder
+                    // We attempt to extract even if the column is null, to ensure all columns are present
+                    addValueToStructBuilder(structBuilder, columnName, rs, columnIndex, columnType);
 
                     columnIndex++;
                 } catch (IllegalArgumentException e) {
-                    // No more columns
+                    // No more columns - this is the expected way to detect end of columns
+                    LOG.debug("Reached end of columns at index {}", columnIndex);
                     break;
                 } catch (Exception e) {
                     // Log error for this column but continue with others
-                    System.err.println("Error processing column " + columnIndex + ": " + e.getMessage());
+                    LOG.warn("Error processing column at index {}: {}", columnIndex, e.getMessage(), e);
                     columnIndex++;
                 }
             }
 
+            if (columnIndex >= maxColumns) {
+                LOG.warn("Reached maximum column limit ({}) - possible infinite loop", maxColumns);
+            }
+
             return structBuilder.build();
         } catch (Exception e) {
-            System.err.println("Error extracting row from ResultSet: " + e.getMessage());
+            LOG.error("Error extracting row from ResultSet", e);
             // Return empty struct instead of null as per requirement
             return Struct.newBuilder().build();
         }
@@ -293,32 +305,44 @@ public class SpannerChangeStreamSource extends RichSourceFunction<ChangeRecord>
 
     /**
      * Extract and add a column value to the Struct.Builder based on its type.
+     *
+     * If extraction fails for a non-null column, the column is still added to the struct
+     * with a null value to ensure all columns are present in the result.
      */
     private void addValueToStructBuilder(Struct.Builder builder, String columnName,
             ResultSet rs, int columnIndex, Type columnType) {
         Type.Code typeCode = columnType.getCode();
+        boolean columnAdded = false;
+
         try {
             switch (typeCode) {
                 case INT64:
                     builder.set(columnName).to(rs.getLong(columnIndex));
+                    columnAdded = true;
                     break;
                 case FLOAT64:
                     builder.set(columnName).to(rs.getDouble(columnIndex));
+                    columnAdded = true;
                     break;
                 case BOOL:
                     builder.set(columnName).to(rs.getBoolean(columnIndex));
+                    columnAdded = true;
                     break;
                 case STRING:
                     builder.set(columnName).to(rs.getString(columnIndex));
+                    columnAdded = true;
                     break;
                 case BYTES:
                     builder.set(columnName).to(rs.getBytes(columnIndex));
+                    columnAdded = true;
                     break;
                 case TIMESTAMP:
                     builder.set(columnName).to(rs.getTimestamp(columnIndex));
+                    columnAdded = true;
                     break;
                 case NUMERIC:
                     builder.set(columnName).to(rs.getBigDecimal(columnIndex));
+                    columnAdded = true;
                     break;
                 case ARRAY:
                     // Handle array types using the appropriate array setter methods
@@ -326,31 +350,58 @@ public class SpannerChangeStreamSource extends RichSourceFunction<ChangeRecord>
                     Type.Code elementCode = elementType.getCode();
                     if (elementCode == Type.Code.STRING) {
                         builder.set(columnName).toStringArray(rs.getStringList(columnIndex));
+                        columnAdded = true;
                     } else if (elementCode == Type.Code.INT64) {
                         builder.set(columnName).toInt64Array(rs.getLongList(columnIndex));
+                        columnAdded = true;
                     } else if (elementCode == Type.Code.FLOAT64) {
                         builder.set(columnName).toFloat64Array(rs.getDoubleList(columnIndex));
+                        columnAdded = true;
                     } else if (elementCode == Type.Code.BOOL) {
                         builder.set(columnName).toBoolArray(rs.getBooleanList(columnIndex));
-                    } else {
-                        // For other array types (BYTES, TIMESTAMP, NUMERIC, STRUCT, ARRAY),
-                        // store as string representation as fallback
+                        columnAdded = true;
+                    } else if (elementCode == Type.Code.BYTES) {
+                        // Handle BYTES array
+                        builder.set(columnName).toBytesArray(rs.getBytesList(columnIndex));
+                        columnAdded = true;
+                    } else if (elementCode == Type.Code.NUMERIC) {
+                        // Handle NUMERIC array - Spanner doesn't provide direct BigDecimal list access
+                        // Store as string representation as fallback
                         builder.set(columnName).to(rs.getString(columnIndex));
+                        columnAdded = true;
+                    } else {
+                        // For TIMESTAMP, STRUCT, ARRAY (nested), store as string representation
+                        builder.set(columnName).to(rs.getString(columnIndex));
+                        columnAdded = true;
                     }
                     break;
                 case STRUCT:
                     // Nested struct - not directly accessible via index in ResultSet
                     // Store as JSON string representation
                     builder.set(columnName).to(rs.getString(columnIndex));
+                    columnAdded = true;
                     break;
                 default:
                     // Default fallback - treat as string
                     builder.set(columnName).to(rs.getString(columnIndex));
+                    columnAdded = true;
                     break;
             }
         } catch (Exception e) {
-            System.err.println("Error extracting " + typeCode + " value for column " +
-                columnName + ": " + e.getMessage());
+            // Log the error but ensure the column is still added with a null value
+            // This prevents silent failures and ensures struct has all columns
+            LOG.error("Error extracting {} value for column {} at index {}: {}",
+                    typeCode, columnName, columnIndex, e.getMessage(), e);
+
+            // Add the column with null value to ensure struct completeness
+            if (!columnAdded && !rs.isNull(columnIndex)) {
+                // For non-null columns that failed extraction, try to add as null
+                try {
+                    builder.set(columnName).to((String) null);
+                } catch (Exception nullEx) {
+                    LOG.debug("Could not set null for column {}: {}", columnName, nullEx.getMessage());
+                }
+            }
         }
     }
 
