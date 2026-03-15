@@ -45,7 +45,6 @@ if [ -z "$JM_POD" ]; then
     kubectl exec deployment/"$JM_DEPLOYMENT" -n "$NAMESPACE" -- /opt/flink/bin/flink run \
         -c $MAIN_CLASS \
         -d \
-        --classname $MAIN_CLASS \
         -p $PARALLELISM \
         /tmp/spanner-cdc-bigquery-1.0-SNAPSHOT.jar
 else
@@ -57,7 +56,6 @@ else
     kubectl exec "$JM_POD" -n "$NAMESPACE" -- /opt/flink/bin/flink run \
         -c $MAIN_CLASS \
         -d \
-        --classname $MAIN_CLASS \
         -p $PARALLELISM \
         /tmp/spanner-cdc-bigquery-1.0-SNAPSHOT.jar
 fi
