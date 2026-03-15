@@ -135,23 +135,157 @@ public class SpannerChangeStreamSource extends RichSourceFunction<ChangeRecord>
 
     /**
      * Change stream phase: Tail the change stream for new changes
+     *
+     * Uses Spanner's change stream query syntax to fetch changes.
+     * The change stream is queried using SQL with the change stream function.
      */
     private void runChangeStreamPhase(SourceContext<ChangeRecord> ctx) {
-        // Query change stream for new changes
-        // Note: Full implementation would use ChangeStreamTimestampToken
-        // For MVP, we poll with timestamp tracking
-
+        // Get the start timestamp from state for resumption
         String lastTsStr = state.getChangeStreamToken();
-        Timestamp startTimestamp = Timestamp.now();
+        Timestamp startTimestamp;
+        Timestamp endTimestamp = Timestamp.now();
 
-        // For demo: emit a heartbeat every 30 seconds
-        // Actual change stream query would go here
-        long now = System.currentTimeMillis();
-        java.sql.Timestamp lastCheckpointTs = state.getLastCommitTimestamp();
+        try {
+            // Parse the stored token as timestamp, or use current time if first run
+            if (lastTsStr != null && !lastTsStr.isEmpty()) {
+                startTimestamp = Timestamp.parseTimestamp(lastTsStr);
+            } else {
+                startTimestamp = Timestamp.now();
+                LOG.info("No change stream token found, starting from current time: {}", startTimestamp);
+                return; // Wait for next iteration to avoid empty first query
+            }
+        } catch (Exception e) {
+            LOG.error("Failed to parse change stream token: {}, using current time", lastTsStr, e);
+            startTimestamp = Timestamp.now();
+            return;
+        }
 
-        if (lastCheckpointTs == null || now - lastCheckpointTs.getTime() > 30000) {
-            System.out.println("CDC heartbeat: " + new java.sql.Timestamp(now) + " - Change stream phase active");
-            state.setLastCommitTimestamp(new java.sql.Timestamp(now));
+        // Query change stream for data changes using SQL
+        // Spanner change streams use the CHANGE_STREAM query function
+        String changeStreamQuery = String.format(
+            "SELECT * " +
+            "FROM READ_ECOMMERCE_CHANGE_STREAM('%s', '%s', '%s')",
+            changeStreamName,
+            startTimestamp.toString(),
+            endTimestamp.toString()
+        );
+
+        try {
+            LOG.debug("Executing change stream query from {} to {}", startTimestamp, endTimestamp);
+
+            // Execute the change stream query via SQL
+            try (ReadOnlyTransaction transaction = dbClient.readOnlyTransaction()) {
+                ResultSet resultSet = transaction.executeQuery(Statement.of(changeStreamQuery));
+
+                int recordCount = 0;
+                Timestamp latestTimestamp = startTimestamp;
+
+                while (resultSet.next() && running) {
+                    // Get the current row as a struct to access change stream fields
+                    Struct row = getCurrentRowAsStruct(resultSet);
+                    if (row == null) {
+                        continue;
+                    }
+
+                    // Check if this is a heartbeat record
+                    // Heartbeat records have no data columns and are used for partition tracking
+                    String modTypeStr = null;
+                    try {
+                        modTypeStr = row.getString("mod_type");
+                    } catch (IllegalArgumentException e) {
+                        // mod_type field doesn't exist - likely a heartbeat record
+                        LOG.debug("Skipping heartbeat or metadata record");
+                        continue;
+                    }
+
+                    if (modTypeStr == null || modTypeStr.isEmpty()) {
+                        // Heartbeat or metadata record - log but don't emit
+                        continue;
+                    }
+
+                    // Extract table name
+                    String tableName = null;
+                    try {
+                        tableName = row.getString("table_name");
+                    } catch (IllegalArgumentException e) {
+                        LOG.debug("No table_name field in record");
+                    }
+
+                    if (tableName == null || tableName.isEmpty()) {
+                        continue;
+                    }
+
+                    // Parse the modification type
+                    ModType modType;
+                    try {
+                        modType = ModType.fromString(modTypeStr);
+                    } catch (Exception e) {
+                        LOG.warn("Unknown mod type: {}, skipping record", modTypeStr);
+                        continue;
+                    }
+
+                    // Extract new data (current values)
+                    Map<String, Object> data = null;
+                    try {
+                        Struct newDataStruct = row.getStruct("data");
+                        data = extractStructData(newDataStruct);
+                    } catch (IllegalArgumentException e) {
+                        LOG.debug("No data field for record in table {}", tableName);
+                    }
+
+                    // Extract old data (previous values for UPDATE/DELETE)
+                    Map<String, Object> oldData = null;
+                    if (modType == ModType.UPDATE || modType == ModType.DELETE) {
+                        try {
+                            Struct oldDataStruct = row.getStruct("old_data");
+                            oldData = extractStructData(oldDataStruct);
+                        } catch (IllegalArgumentException e) {
+                            LOG.debug("No old_data field for UPDATE/DELETE record in table {}", tableName);
+                        }
+                    }
+
+                    // Extract commit timestamp
+                    Timestamp commitTimestamp = null;
+                    try {
+                        commitTimestamp = row.getTimestamp("commit_timestamp");
+                        if (commitTimestamp != null) {
+                            latestTimestamp = commitTimestamp;
+                        }
+                    } catch (IllegalArgumentException e) {
+                        LOG.debug("No commit_timestamp field");
+                    }
+
+                    // Create and emit the change record
+                    ChangeRecord record = new ChangeRecord(tableName, modType, data);
+                    record.setOldData(oldData);
+                    if (commitTimestamp != null) {
+                        record.setCommitTimestamp(new java.sql.Timestamp(commitTimestamp.toSqlTimestamp().getTime()));
+                    } else {
+                        record.setCommitTimestamp(new java.sql.Timestamp(System.currentTimeMillis()));
+                    }
+
+                    ctx.collect(record);
+                    recordCount++;
+
+                    LOG.debug("Emitted change record: table={}, modType={}, data={}",
+                        tableName, modType, data);
+                }
+
+                // Update the change stream token to the latest processed timestamp
+                // Use endTimestamp to ensure we don't miss any records
+                if (recordCount > 0 || endTimestamp != null) {
+                    state.setChangeStreamToken(endTimestamp.toString());
+                    state.setLastCommitTimestamp(new java.sql.Timestamp(System.currentTimeMillis()));
+                    LOG.info("Processed {} change stream records, updated token to {}",
+                        recordCount, endTimestamp);
+                }
+
+            } catch (Exception e) {
+                LOG.error("Error processing change stream results", e);
+            }
+
+        } catch (Exception e) {
+            LOG.error("Error querying change stream", e);
         }
     }
 
