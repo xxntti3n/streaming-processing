@@ -1,71 +1,71 @@
 # helm/streaming-stack/values-minimal.yaml
+# Minimal preset: Full stack, single executor, resource-constrained
 
 mysql:
   enabled: true
   auth:
-    rootPassword: "rootpw"
-    database: "appdb"
+    rootPassword: rootpw
+    database: appdb
   primary:
-    configuration: |-
-      [mysqld]
-      server-id=1
-      log-bin=mysql-bin
-      binlog_format=ROW
-      binlog_row_image=FULL
-      gtid_mode=ON
-      enforce_gtid_consistency=ON
-  initdbScripts:
-    init.sql: |
-      CREATE DATABASE IF NOT EXISTS appdb;
-      USE appdb;
-      CREATE TABLE products (
-        id INT PRIMARY KEY AUTO_INCREMENT,
-        sku VARCHAR(64) NOT NULL UNIQUE,
-        name VARCHAR(128) NOT NULL
-      ) ENGINE=InnoDB;
-      INSERT INTO products (sku, name) VALUES
-      ('P-001','Widget Mini'),
-      ('P-002','Widget Standard'),
-      ('P-003','Widget Pro'),
-      ('P-004','Widget Ultra');
-  resources:
-    requests:
-      cpu: 200m
-      memory: 256Mi
-    limits:
-      cpu: 500m
-      memory: 512Mi
+    tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 300m
+        memory: 256Mi
 
 minio:
   enabled: true
   auth:
-    rootUser: "minio"
-    rootPassword: "minio123"
-  defaultBuckets: "warehouse,iceberg"
+    rootUser: minio
+    rootPassword: minio123
+  defaultBuckets: warehouse,iceberg
+  tolerations:
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
   persistence:
-    size: 5Gi
+    size: 2Gi
   resources:
     requests:
-      cpu: 200m
-      memory: 256Mi
+      cpu: 100m
+      memory: 128Mi
     limits:
-      cpu: 500m
-      memory: 512Mi
+      cpu: 300m
+      memory: 256Mi
 
 kafka:
   enabled: true
-  # Use Kraft mode (no Zookeeper)
   zookeeper:
     enabled: false
   controller:
     replicaCount: 1
+    tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
     resources:
       requests:
         cpu: 200m
-        memory: 384Mi
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
   broker:
     replicaCount: 1
+    tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
     resources:
       requests:
         cpu: 200m
-        memory: 384Mi
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
