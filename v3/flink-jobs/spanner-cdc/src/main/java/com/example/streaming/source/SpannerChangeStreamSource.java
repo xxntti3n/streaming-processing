@@ -152,11 +152,17 @@ public class SpannerChangeStreamSource extends RichSourceFunction<ChangeRecord>
             } else {
                 startTimestamp = Timestamp.now();
                 LOG.info("No change stream token found, starting from current time: {}", startTimestamp);
-                return; // Wait for next iteration to avoid empty first query
+                // Initialize the token on first run to prevent infinite empty loops
+                state.setChangeStreamToken(startTimestamp.toString());
+                LOG.info("Initialized change stream token to: {}", startTimestamp);
+                return;
             }
         } catch (Exception e) {
             LOG.error("Failed to parse change stream token: {}, using current time", lastTsStr, e);
             startTimestamp = Timestamp.now();
+            // Initialize the token on parse error to prevent infinite empty loops
+            state.setChangeStreamToken(startTimestamp.toString());
+            LOG.info("Initialized change stream token after parse error to: {}", startTimestamp);
             return;
         }
 
@@ -273,11 +279,16 @@ public class SpannerChangeStreamSource extends RichSourceFunction<ChangeRecord>
 
                 // Update the change stream token to the latest processed timestamp
                 // Use latestTimestamp (last record's commit timestamp) to avoid duplicate processing
-                if (recordCount > 0 || endTimestamp != null) {
+                if (recordCount > 0) {
+                    // Records processed - use last record's commit timestamp
                     state.setChangeStreamToken(latestTimestamp.toString());
                     state.setLastCommitTimestamp(new java.sql.Timestamp(System.currentTimeMillis()));
                     LOG.info("Processed {} change stream records, updated token to {}",
                         recordCount, latestTimestamp);
+                } else {
+                    // No records - advance to end timestamp to avoid re-querying empty window
+                    state.setChangeStreamToken(endTimestamp.toString());
+                    LOG.debug("No change stream records found, advanced token to: {}", endTimestamp);
                 }
 
             } catch (Exception e) {
