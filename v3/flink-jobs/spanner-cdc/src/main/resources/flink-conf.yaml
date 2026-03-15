@@ -1,11 +1,11 @@
 # Flink configuration for Spanner CDC job
-state.backend: hashmap
+state.backend: jobmanager
 state.checkpoints.dir: file:///tmp/flink-checkpoints
-checkpoint.interval: 5000
-checkpointing-mode: EXACTLY_ONCE
-checkpoint.timeout: 60000
-checkpoint.min-pause: 1000
-checkpoint.max-concurrent-checkpoints: 1
+execution.checkpointing.interval: 5000
+execution.checkpointing.mode: exactly_once
+execution.checkpointing.timeout: 60000
+execution.checkpointing.min-pause: 10000
+execution.checkpointing.max-concurrent-checkpoints: 1
 restart-strategy: fixed-delay
 restart-strategy.fixed-delay.attempts: 3
 restart-strategy.fixed-delay.delay: 10000
