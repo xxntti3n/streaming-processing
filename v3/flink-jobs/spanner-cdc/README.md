@@ -111,7 +111,7 @@ BigQuery Table (updated)
 
 ```bash
 cd /path/to/streaming-processing/v3
-git checkout feature/spanner-cdc-finalization
+git checkout -b your-feature-branch
 ```
 
 ### 2. Start Kubernetes Cluster
@@ -138,20 +138,7 @@ This deploys:
 - BigQuery emulator at `bigquery-emulator:9050`
 - Flink 1.19.1 cluster (JobManager + TaskManager)
 
-Or deploy components individually via kubectl:
-```bash
-# Create namespace
-kubectl create namespace spanner-cdc
-
-# Deploy Spanner emulator
-kubectl apply -f k8s/spanner-emulator.yaml
-
-# Deploy BigQuery emulator
-kubectl apply -f k8s/bigquery-emulator.yaml
-
-# Deploy Flink cluster
-kubectl apply -f k8s/flink-cluster.yaml
-```
+All components are deployed to the `default` namespace.
 
 ### 4. Verify Deployment
 
@@ -393,7 +380,7 @@ kubectl logs -l app=bigquery-emulator -f
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SPANNER_HOST` | `spanner-emulator:9010` | Spanner emulator host:port |
+| `SPANNER_EMULATOR_HOST` | `spanner-emulator:9010` | Spanner emulator host:port |
 | `BIGQUERY_ENDPOINT` | `http://bigquery-emulator:9050` | BigQuery emulator endpoint |
 | `FLINK_STATE_BACKEND` | `file:///tmp/flink-checkpoints` | Checkpoint storage location |
 | `NAMESPACE` | `default` | Kubernetes namespace |
