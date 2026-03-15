@@ -40,7 +40,7 @@ for i in {1..5}; do
         --instance="$INSTANCE_ID" \
         --database="$DATABASE_ID" \
         --table="customers" \
-        --data=customer_id="$i",email="customer$i@example.com",name="Customer $i" \
+        --data="customer_id=$i,email='customer$i@example.com',name='Customer $i'" \
         --project="$PROJECT_ID" 2>/dev/null && echo "  Successfully inserted customer $i" || echo "  Warning: Failed to insert customer $i (may already exist)"
 done
 
@@ -55,7 +55,7 @@ for i in {1..5}; do
         --instance="$INSTANCE_ID" \
         --database="$DATABASE_ID" \
         --table="products" \
-        --data=product_id="$i",sku="PROD-00$i",name="Product $i",price=$((i * 10)).00 \
+        --data="product_id=$i,sku='PROD-00$i',name='Product $i',price=$((i * 10)).00" \
         --project="$PROJECT_ID" 2>/dev/null && echo "  Successfully inserted product $i" || echo "  Warning: Failed to insert product $i (may already exist)"
 done
 
@@ -70,7 +70,7 @@ for i in {1..3}; do
         --instance="$INSTANCE_ID" \
         --database="$DATABASE_ID" \
         --table="orders" \
-        --data=order_id="$i",customer_id="$i",product_id="$i",quantity=$((i * 2)),status="PENDING" \
+        --data="order_id=$i,customer_id=$i,product_id=$i,quantity=$((i * 2)),status='PENDING'" \
         --project="$PROJECT_ID" 2>/dev/null && echo "  Successfully inserted order $i" || echo "  Warning: Failed to insert order $i (may already exist)"
 done
 
