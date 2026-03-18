@@ -49,14 +49,50 @@
             <version>${flink.version}</version>
         </dependency>
 
-        <!-- Google Cloud Spanner Client (includes Change Streams support) -->
+        <!-- Flink Iceberg connector (matches Flink 1.19.1) -->
         <dependency>
-            <groupId>com.google.cloud</groupId>
-            <artifactId>google-cloud-spanner</artifactId>
-            <version>6.60.0</version>
+            <groupId>org.apache.iceberg</groupId>
+            <artifactId>iceberg-flink-runtime-1.19</artifactId>
+            <version>1.9.2</version>
         </dependency>
 
-        <!-- HTTP client for BigQuery emulator -->
+        <!-- Iceberg AWS S3 connector for MinIO compatibility -->
+        <dependency>
+            <groupId>org.apache.iceberg</groupId>
+            <artifactId>iceberg-aws</artifactId>
+            <version>1.9.2</version>
+        </dependency>
+
+        <!-- AWS SDK v2 for S3 (MinIO) -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>2.25.11</version>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>url-connection-client</artifactId>
+            <version>2.25.11</version>
+        </dependency>
+
+        <!-- Hadoop for S3 filesystem (MinIO) -->
+        <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-client</artifactId>
+            <version>3.3.6</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-common</artifactId>
+            <version>3.3.6</version>
+        </dependency>
+
+        <!-- HTTP client for Spanner REST API -->
+        <dependency>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>okhttp</artifactId>
+            <version>4.12.0</version>
+        </dependency>
         <dependency>
             <groupId>com.squareup.okhttp3</groupId>
             <artifactId>okhttp</artifactId>

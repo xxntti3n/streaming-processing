@@ -1,19 +1,19 @@
 package com.example.streaming;
 
 import com.example.streaming.routing.TableRouterFunction;
-import com.example.streaming.sink.BigQueryUpsertSink;
+import com.example.streaming.sink.IcebergUpsertSink;
 import com.example.streaming.source.ChangeRecord;
-import com.example.streaming.source.SpannerChangeStreamSource;
+import com.example.streaming.source.SpannerHttpSource;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 
 /**
- * Main Flink pipeline for Spanner to BigQuery CDC.
+ * Main Flink pipeline for Spanner to Iceberg CDC.
  *
  * Pipeline flow:
- * 1. SpannerChangeStreamSource - Reads from Spanner (snapshot + change stream)
+ * 1. SpannerHttpSource - Reads from Spanner via HTTP API (snapshot + polling)
  * 2. TableRouterFunction - Adds target table metadata
- * 3. BigQueryUpsertSink - Writes to BigQuery with upsert semantics
+ * 3. IcebergUpsertSink - Writes to Iceberg tables on MinIO
  */
 public class SpannerCdcPipeline {
 
@@ -37,28 +37,29 @@ public class SpannerCdcPipeline {
         env.setStateBackend(new org.apache.flink.runtime.state.hashmap.HashMapStateBackend());
         env.getCheckpointConfig().setCheckpointStorage(stateBackend);
 
-        // Create Spanner change stream source
-        DataStream<ChangeRecord> changeStream = env.addSource(new SpannerChangeStreamSource())
-            .name("spanner-change-stream-source")
+        // Create Spanner HTTP source (avoids SDK classloading issues)
+        DataStream<ChangeRecord> changeStream = env.addSource(new SpannerHttpSource())
+            .name("spanner-http-source")
             .uid("spanner-source");
 
-        // Route to target tables (adds BigQuery table metadata)
+        // Route to target tables (adds Iceberg table metadata)
         DataStream<ChangeRecord> routed = changeStream
             .process(new TableRouterFunction())
             .name("table-router")
             .uid("table-router");
 
-        // Sink to BigQuery with upsert semantics
-        routed.addSink(new BigQueryUpsertSink())
-            .name("bigquery-upsert")
-            .uid("bigquery-sink");
+        // Sink to Iceberg with upsert semantics
+        routed.addSink(new IcebergUpsertSink())
+            .name("iceberg-upsert")
+            .uid("iceberg-sink");
 
         // Execute job
-        System.out.println("Starting Spanner CDC Pipeline...");
-        System.out.println("Source: Spanner emulator at spanner-emulator:9010");
-        System.out.println("Sink: BigQuery emulator at bigquery-emulator:9050");
+        System.out.println("Starting Spanner to Iceberg CDC Pipeline...");
+        System.out.println("Source: Spanner HTTP API at " + System.getenv().getOrDefault("SPANNER_EMULATOR_HOST", "spanner-emulator:9010"));
+        System.out.println("Sink: Iceberg tables on MinIO (s3a://warehouse:9000)");
+        System.out.println("Catalog: ICEBERG_CATALOG_URI=" + System.getenv().getOrDefault("ICEBERG_CATALOG_URI", "http://iceberg-rest-catalog:8181"));
         System.out.println("State backend: " + stateBackend);
 
-        env.execute("spanner-cdc-bigquery");
+        env.execute("spanner-cdc-iceberg");
     }
 }

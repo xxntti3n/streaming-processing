@@ -4,17 +4,17 @@ import com.example.streaming.source.ChangeRecord;
 import org.apache.flink.streaming.api.functions.ProcessFunction;
 
 /**
- * Routes change records to their target BigQuery tables.
+ * Routes change records to their target Iceberg tables.
  * Adds target table metadata for the sink.
  */
 public class TableRouterFunction extends ProcessFunction<ChangeRecord, ChangeRecord> {
 
-    private final String project;
-    private final String dataset;
+    private final String namespace;
+    private final String catalog;
 
     public TableRouterFunction() {
-        this.project = "test-project";
-        this.dataset = "ecommerce";
+        this.namespace = "ecommerce";
+        this.catalog = "iceberg";
     }
 
     @Override
@@ -23,8 +23,8 @@ public class TableRouterFunction extends ProcessFunction<ChangeRecord, ChangeRec
         Context ctx,
         org.apache.flink.util.Collector<ChangeRecord> out
     ) {
-        // Set target table for sink
-        String targetTable = project + "." + dataset + "." + record.getTableName();
+        // Set target table for Iceberg sink (namespace.table format)
+        String targetTable = namespace + "." + record.getTableName();
         record.setTargetTable(targetTable);
         out.collect(record);
     }

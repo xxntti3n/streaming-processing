@@ -1,0 +1,46 @@
+# Spanner Emulator Deployment
+apiVersion: v1
+kind: Service
+metadata:
+  name: spanner-emulator
+  namespace: default
+spec:
+  selector:
+    app: spanner-emulator
+  ports:
+  - port: 9010
+    targetPort: 9010
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spanner-emulator
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: spanner-emulator
+  template:
+    metadata:
+      labels:
+        app: spanner-emulator
+    spec:
+      containers:
+      - name: spanner-emulator
+        image: gcr.io/cloud-spanner-emulator/emulator:1.4.0
+        ports:
+        - containerPort: 9010
+        env:
+        - name: SPANNER_EMULATOR_HOST
+          value: "0.0.0.0"
+        - name: SPANNER_EMULATOR_PORT
+          value: "9010"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
