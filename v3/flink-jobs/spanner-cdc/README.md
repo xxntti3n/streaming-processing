@@ -1,19 +1,20 @@
-# Spanner CDC to BigQuery Pipeline
+# Spanner CDC to Iceberg Pipeline
 
-Real-time Change Data Capture (CDC) pipeline streaming from Google Cloud Spanner to BigQuery using Apache Flink.
+Real-time Change Data Capture (CDC) pipeline streaming from Google Cloud Spanner to Apache Iceberg using Apache Flink.
 
 ## Project Overview
 
-This project implements a production-ready CDC pipeline that captures change events from Spanner and replicates them to BigQuery in near real-time. The pipeline uses Apache Flink for stream processing with exactly-once semantics and automatic checkpoint-based recovery.
+This project implements a production-ready CDC pipeline that captures change events from Spanner and replicates them to Apache Iceberg tables in near real-time. The pipeline uses Apache Flink for stream processing with exactly-once semantics and automatic checkpoint-based recovery. Iceberg tables are stored on MinIO (S3-compatible storage) with a REST catalog for metadata management.
 
 ### Key Features
 
 - **Change Stream Integration**: Leverages Spanner Change Streams API for efficient CDC
 - **Two-Phase Processing**: Snapshot phase for historical data, change stream for ongoing changes
 - **Exactly-Once Semantics**: Checkpointed state ensures no data loss or duplication
-- **Upsert Logic**: Handles INSERT, UPDATE, and DELETE operations in BigQuery
-- **Table Routing**: Dynamically routes changes to appropriate BigQuery tables
-- **Emulator Support**: Works with local Spanner and BigQuery emulators for development
+- **Upsert Logic**: Handles INSERT, UPDATE, and DELETE operations in Iceberg tables
+- **Table Routing**: Dynamically routes changes to appropriate Iceberg tables
+- **Data Lake Architecture**: Uses Iceberg on MinIO for open format data storage
+- **Emulator Support**: Works with local Spanner emulator for development
 
 ### Use Cases
 
@@ -25,12 +26,14 @@ This project implements a production-ready CDC pipeline that captures change eve
 ## Architecture
 
 ```
-Spanner (Emulator)        Flink Cluster          BigQuery (Emulator)
+Spanner (Emulator)        Flink Cluster          Iceberg on MinIO
      |                         |                        |
      |--CDC Changes--> [Source]-->[Router]-->[Sink] --|
                           |          |          |
                        Checkpoint   Target     Upsert
                           State      Table     Logic
+                                          |
+                                    REST Catalog
 ```
 
 ### Pipeline Components
@@ -42,15 +45,15 @@ Spanner (Emulator)        Flink Cluster          BigQuery (Emulator)
 - Handles connection failures and automatic retries
 
 #### 2. TableRouterFunction
-- Adds BigQuery target table metadata to each change record
-- Routes to `test-project.ecommerce.{table_name}`
+- Adds Iceberg target table metadata to each change record
+- Routes to `ecommerce.{table_name}` in the Iceberg catalog
 - Supports dynamic table discovery
 
-#### 3. BigQueryUpsertSink
-- Writes changes to BigQuery via HTTP API
-- Implements upsert logic (INSERT/UPDATE/DELETE)
-- Handles BigQuery emulator communication
-- Batch writes for optimal performance
+#### 3. IcebergUpsertSink
+- Writes changes to Iceberg tables using Flink Iceberg sink
+- Implements upsert logic (INSERT/UPDATE/DELETE) via Iceberg's row-level operations
+- Integrates with MinIO for data storage and REST catalog for metadata
+- Batch writes for optimal performance with Iceberg's append-heavy format
 
 ### Data Flow
 
@@ -64,10 +67,10 @@ ChangeRecord (ModType, Data, PartitionToken, Timestamp)
 TableRouterFunction (adds target table metadata)
     |
     v
-BigQueryUpsertSink (executes upsert via HTTP)
+IcebergUpsertSink (writes via Flink Iceberg sink)
     |
     v
-BigQuery Table (updated)
+Iceberg Table on MinIO (updated via REST Catalog)
 ```
 
 ## Prerequisites
@@ -135,7 +138,8 @@ Use the provided deployment script:
 
 This deploys:
 - Spanner emulator at `spanner-emulator:9010`
-- BigQuery emulator at `bigquery-emulator:9050`
+- MinIO for S3-compatible storage at `minio:9000`
+- Iceberg REST catalog at `iceberg-rest-catalog:8181`
 - Flink 1.19.1 cluster (JobManager + TaskManager)
 
 All components are deployed to the `default` namespace.
@@ -149,7 +153,8 @@ kubectl get pods -n default
 # Expected output:
 # NAME                                 READY   STATUS    RESTARTS   AGE
 # spanner-emulator-xxxxx               1/1     Running   0          2m
-# bigquery-emulator-xxxxx              1/1     Running   0          2m
+# minio-xxxxx                          1/1     Running   0          2m
+# iceberg-rest-catalog-xxxxx           1/1     Running   0          2m
 # flink-jobmanager-xxxxx               1/1     Running   0          2m
 # flink-taskmanager-xxxxx              1/1     Running   0          2m
 ```
@@ -311,14 +316,16 @@ Checking Infrastructure...
 ✓ Service 'spanner-emulator' exists
 ✓ Service 'flink-jobmanager' exists
 ✓ Service 'flink-taskmanager' exists
-✓ Service 'bigquery-emulator' exists
+✓ Service 'minio' exists
+✓ Service 'iceberg-rest-catalog' exists
 
 Checking Pods...
 --------------------------
 ✓ Pod with label 'app=spanner-emulator' is running
+✓ Pod with label 'app=minio' is running
+✓ Pod with label 'app=iceberg-rest-catalog' is running
 ✓ Pod with label 'app=flink,component=jobmanager' is running
 ✓ Pod with label 'app=flink,component=taskmanager' is running
-✓ Pod with label 'app=bigquery-emulator' is running
 
 Checking Flink Jobs...
 --------------------------
@@ -328,7 +335,7 @@ Checking Flink Jobs...
 ==================================================
 Verification Complete
 ==================================================
-Passed: 9
+Passed: 10
 Failed: 0
 
 ✓ All checks passed!
@@ -353,9 +360,13 @@ kubectl port-forward svc/flink-jobmanager 8081:8081
 # Open http://localhost:8081
 # Check: numRecordsIn, numRecordsOut, numSucceededCheckpoints
 
-# Check BigQuery emulator for data
-kubectl exec -it deployment/bigquery-emulator -- \
-  curl -s http://localhost:9050/bigquery/v2/projects/test-project/datasets
+# Check Iceberg catalog for tables
+kubectl exec -it deployment/iceberg-rest-catalog -- \
+  curl -s http://localhost:8181/v1/namespaces/ecommerce/tables
+
+# Query Iceberg tables via spark-sql or trino
+# Example: Check data in MinIO via mc (MinIO Client)
+kubectl exec -it deployment/minio -- mc ls local/warehouse/ecommerce/
 ```
 
 ### 4. View Logs
@@ -370,8 +381,11 @@ kubectl logs -l app=flink,component=taskmanager -f
 # Spanner emulator logs
 kubectl logs -l app=spanner-emulator -f
 
-# BigQuery emulator logs
-kubectl logs -l app=bigquery-emulator -f
+# MinIO logs
+kubectl logs -l app=minio -f
+
+# Iceberg REST catalog logs
+kubectl logs -l app=iceberg-rest-catalog -f
 ```
 
 ## Configuration
@@ -381,11 +395,13 @@ kubectl logs -l app=bigquery-emulator -f
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `SPANNER_EMULATOR_HOST` | `spanner-emulator:9010` | Spanner emulator host:port |
-| `BIGQUERY_ENDPOINT` | `http://bigquery-emulator:9050` | BigQuery emulator endpoint |
+| `ICEBERG_CATALOG_URI` | `http://iceberg-rest-catalog:8181` | Iceberg REST catalog endpoint |
+| `ICEBERG_WAREHOUSE` | `s3a://warehouse/` | MinIO S3 path for Iceberg data |
+| `MINIO_ENDPOINT` | `http://minio:9000` | MinIO endpoint for S3 storage |
 | `FLINK_STATE_BACKEND` | `file:///tmp/flink-checkpoints` | Checkpoint storage location |
 | `NAMESPACE` | `default` | Kubernetes namespace |
 | `PARALLELISM` | `1` | Flink job parallelism |
-| `PROJECT_ID` | `test-project` | GCP project ID |
+| `PROJECT_ID` | `test-project` | Project ID for Iceberg namespace |
 | `INSTANCE_ID` | `test-instance` | Spanner instance ID |
 | `DATABASE_ID` | `ecommerce` | Spanner database ID |
 
@@ -503,10 +519,15 @@ For production deployments, consider:
    kubectl logs -l app=flink,component=taskmanager | grep "Phase:"
    ```
 
-3. Verify BigQuery emulator is accessible
+3. Verify Iceberg catalog is accessible
    ```bash
-   kubectl exec deployment/bigquery-emulator -- \
-     curl -s http://localhost:9050
+   kubectl exec deployment/iceberg-rest-catalog -- \
+     curl -s http://localhost:8181/v1/config
+   ```
+
+4. Verify MinIO storage is accessible
+   ```bash
+   kubectl exec deployment/minio -- mc ls local/
    ```
 
 4. Check Flink job metrics
@@ -559,18 +580,19 @@ For production deployments, consider:
 
 ### Connection Issues
 
-**Symptoms**: Cannot connect to Spanner or BigQuery emulators
+**Symptoms**: Cannot connect to Spanner, MinIO, or Iceberg catalog
 
 **Solutions**:
 1. Verify services are running
    ```bash
-   kubectl get svc | grep -E "spanner|bigquery"
+   kubectl get svc | grep -E "spanner|minio|iceberg"
    ```
 
 2. Check service endpoints
    ```bash
    kubectl get svc spanner-emulator -o yaml
-   kubectl get svc bigquery-emulator -o yaml
+   kubectl get svc minio -o yaml
+   kubectl get svc iceberg-rest-catalog -o yaml
    ```
 
 3. Test connectivity from Flink pods
@@ -579,7 +601,10 @@ For production deployments, consider:
      curl -v spanner-emulator:9010
 
    kubectl exec deployment/flink-taskmanager -- \
-     curl -v http://bigquery-emulator:9050
+     curl -v http://minio:9000
+
+   kubectl exec deployment/flink-taskmanager -- \
+     curl -v http://iceberg-rest-catalog:8181
    ```
 
 4. Check network policies
@@ -689,8 +714,7 @@ flink-jobs/spanner-cdc/
 │   │   ├── routing/
 │   │   │   └── TableRouterFunction.java      # Table routing logic
 │   │   └── sink/
-│   │       ├── BigQueryClient.java           # HTTP client for BQ
-│   │       └── BigQueryUpsertSink.java       # Flink sink
+│   │       └── IcebergUpsertSink.java        # Flink Iceberg sink
 │   └── resources/
 │       ├── flink-conf.yaml                   # Flink configuration
 │       └── log4j2.properties                 # Logging config
@@ -735,8 +759,9 @@ scripts/
 
 - Adjust parallelism based on throughput
 - Partition change streams appropriately
-- Optimize batch sizes for BigQuery writes
-- Consider using BigQuery Storage Write API
+- Use Iceberg partitioning for efficient queries (by day, hour, etc.)
+- Leverage Iceberg's snapshot isolation for concurrent reads
+- Configure MinIO erasure coding for data durability
 
 ## License
 
