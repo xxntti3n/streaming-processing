@@ -168,16 +168,16 @@ spec:
         - name: flink-config
           mountPath: /opt/flink/conf/flink-conf.yaml
           subPath: flink-conf.yaml
-        livenessProbe:
-          tcpSocket:
-            port: 6122
+        startupProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - ps aux | grep java | grep TaskManager | grep -v grep
           initialDelaySeconds: 30
-          periodSeconds: 60
-        readinessProbe:
-          tcpSocket:
-            port: 6122
-          initialDelaySeconds: 30
-          periodSeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 30
         resources:
           requests:
             memory: "1Gi"
