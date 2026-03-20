@@ -1,25 +1,71 @@
 # helm/streaming-stack/values-default.yaml
+# Default preset: Comfortable local development
 
 mysql:
   enabled: true
+  auth:
+    rootPassword: rootpw
+    database: appdb
+  primary:
+    tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+    resources:
+      requests:
+        cpu: 200m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
 
 minio:
   enabled: true
+  auth:
+    rootUser: minio
+    rootPassword: minio123
+  defaultBuckets: warehouse,iceberg
+  tolerations:
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
   persistence:
-    size: 10Gi
+    size: 5Gi
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
 
 kafka:
   enabled: true
-
-lakekeeper:
-  enabled: true
-
-spark:
-  enabled: true
-  streamingJob:
-    enabled: true
-  thriftServer:
-    enabled: true
-
-superset:
-  enabled: true
+  zookeeper:
+    enabled: false
+  controller:
+    replicaCount: 1
+    tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+    resources:
+      requests:
+        cpu: 300m
+        memory: 384Mi
+      limits:
+        cpu: 700m
+        memory: 768Mi
+  broker:
+    replicaCount: 1
+    tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+    resources:
+      requests:
+        cpu: 300m
+        memory: 384Mi
+      limits:
+        cpu: 700m
+        memory: 768Mi

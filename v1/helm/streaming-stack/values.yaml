@@ -1,23 +1,76 @@
 # helm/streaming-stack/values.yaml
-# Base configuration - minimal preset by default
-
-global:
-  namespace: streaming
+# Default values for streaming-stack umbrella chart
 
 mysql:
   enabled: true
+  auth:
+    rootPassword: rootpw
+    database: appdb
+  primary:
+    # Allow scheduling on control-plane nodes (for single-node clusters)
+    tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+    resources:
+      requests:
+        cpu: 200m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
 
 minio:
   enabled: true
+  auth:
+    rootUser: minio
+    rootPassword: minio123
+  defaultBuckets: warehouse,iceberg
+  # Allow scheduling on control-plane nodes
+  tolerations:
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
+  persistence:
+    size: 10Gi
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
 
 kafka:
   enabled: true
-
-lakekeeper:
-  enabled: true
-
-spark:
-  enabled: true
-
-superset:
-  enabled: false
+  # Use Kraft mode (no Zookeeper required)
+  zookeeper:
+    enabled: false
+  controller:
+    replicaCount: 1
+    # Allow scheduling on control-plane nodes
+    tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+    resources:
+      requests:
+        cpu: 300m
+        memory: 512Mi
+      limits:
+        cpu: 700m
+        memory: 1Gi
+  broker:
+    replicaCount: 1
+    # Allow scheduling on control-plane nodes
+    tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+    resources:
+      requests:
+        cpu: 300m
+        memory: 512Mi
+      limits:
+        cpu: 700m
+        memory: 1Gi

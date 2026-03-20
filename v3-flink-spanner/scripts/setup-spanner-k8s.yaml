@@ -1,0 +1,95 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: spanner-setup
+spec:
+  containers:
+  - name: setup
+    image: python:3.11-slim
+    command: ["sh", "-c"]
+    args:
+    - |
+      set -e
+      echo "Installing dependencies..."
+      pip install requests grpcio protobuf google-cloud-spanner -q
+
+      echo "Waiting for Spanner emulator..."
+      until nc -z spanner-emulator 9010; do
+        echo "Waiting for spanner-emulator:9010..."
+        sleep 2
+      done
+      echo "Spanner emulator is ready!"
+
+      # Use Python with proper emulator configuration
+      python3 << 'PYEOF'
+      import os
+      os.environ['SPANNER_EMULATOR_HOST'] = 'spanner-emulator:9010'
+
+      from google.cloud import spanner
+      from google.auth.credentials import AnonymousCredentials
+
+      # Create client configured for emulator
+      client = spanner.Client(project='test-project', credentials=AnonymousCredentials())
+      os.environ['SPANNER_EMULATOR_HOST'] = 'spanner-emulator:9010'
+
+      # Force the emulator host
+      import google.cloud.spanner as spanner_module
+      original_make_channel = spanner_module._helpers.make_channel
+
+      def make_emulator_channel(endpoint):
+          import grpc
+          return grpc.insecure_channel('spanner-emulator:9010')
+
+      # Monkey patch to use emulator
+      spanner_module._helpers.make_channel = make_emulator_channel
+
+      # Create instance
+      print("Creating instance...")
+      config_name = 'projects/test-project/instanceConfigs/emulator-config'
+      instance = client.instance('test-instance', configuration_name=config_name)
+
+      try:
+          from google.cloud.spanner_admin_instance_v1 import InstanceAdminClient
+          from google.auth.credentials import AnonymousCredentials
+          import grpc
+
+          # Direct gRPC approach
+          channel = grpc.insecure_channel('spanner-emulator:9010')
+          from google.cloud.spanner_admin_instance_v1 import types as instance_types
+          from google.cloud.spanner_admin_instance_v1 import instance_pb2, instance_pb2_grpc
+
+          stub = instance_pb2_grpc.InstanceAdminStub(channel)
+
+          # Create instance request
+          request = instance_pb2.CreateInstanceRequest(
+              parent='projects/test-project',
+              instance_id='test-instance',
+              instance=instance_pb2.Instance(
+                  config='projects/test-project/instanceConfigs/emulator-config',
+                  display_name='Test Instance',
+                  node_count=1
+              )
+          )
+
+          try:
+              response = stub.CreateInstance(request)
+              print(f"Instance creation started: {response.operation.name}")
+          except Exception as e:
+              error_str = str(e)
+              if 'AlreadyExists' in error_str:
+                  print("Instance already exists")
+              else:
+                  print(f"Error: {e}")
+                  raise
+
+          channel.close()
+
+      except Exception as e:
+          print(f"Error creating instance: {e}")
+
+      print("Setup complete!")
+      PYEOF
+
+      echo "Done!"
+      sleep 3600  # Keep pod alive so we can check logs
+  restartPolicy: Never

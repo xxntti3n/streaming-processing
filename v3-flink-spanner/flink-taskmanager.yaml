@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flink-taskmanager
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flink
+      component: taskmanager
+  template:
+    metadata:
+      labels:
+        app: flink
+        component: taskmanager
+    spec:
+      containers:
+      - name: taskmanager
+        image: flink:1.19.1
+        args:
+        - taskmanager
+        ports:
+        - containerPort: 6122
+          name: rpc
+        - containerPort: 6121
+          name: data
+        env:
+        - name: FLINK_PROPERTIES
+          value: |
+            jobmanager.rpc.address: flink-jobmanager
+            taskmanager.numberOfTaskSlots: 2
+        - name: JAVA_OPTS
+          value: "-Xmx1536m"
+        resources:
+          limits:
+            memory: "1536Mi"
+            cpu: "1"

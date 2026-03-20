@@ -1,6 +1,0 @@
-apiVersion: v2
-name: superset
-description: Apache Superset BI and visualization
-type: application
-version: 0.1.0
-appVersion: "4.0.0"

@@ -1,31 +1,71 @@
 # helm/streaming-stack/values-performance.yaml
+# Performance preset: Production-like testing with multiple replicas
 
 mysql:
   enabled: true
+  auth:
+    rootPassword: rootpw
+    database: appdb
+  primary:
+    tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+    resources:
+      requests:
+        cpu: 500m
+        memory: 768Mi
+      limits:
+        cpu: 1
+        memory: 1.5Gi
 
 minio:
   enabled: true
+  auth:
+    rootUser: minio
+    rootPassword: minio123
+  defaultBuckets: warehouse,iceberg
+  tolerations:
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
   persistence:
     size: 20Gi
+  resources:
+    requests:
+      cpu: 500m
+      memory: 768Mi
+    limits:
+      cpu: 1
+      memory: 1.5Gi
 
 kafka:
   enabled: true
-  kafka:
+  zookeeper:
+    enabled: false
+  controller:
     replicaCount: 2
-
-lakekeeper:
-  enabled: true
-
-spark:
-  enabled: true
-  streamingJob:
-    driver:
-      memory: 2g
-    executor:
-      instances: 2
-      memory: 2g
-  thriftServer:
-    enabled: true
-
-superset:
-  enabled: true
+    tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+    resources:
+      requests:
+        cpu: 500m
+        memory: 768Mi
+      limits:
+        cpu: 1
+        memory: 1.5Gi
+  broker:
+    replicaCount: 2
+    tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+    resources:
+      requests:
+        cpu: 500m
+        memory: 768Mi
+      limits:
+        cpu: 1
+        memory: 1.5Gi

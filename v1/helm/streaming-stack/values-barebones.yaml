@@ -1,25 +1,71 @@
 # helm/streaming-stack/values-barebones.yaml
+# Barebones preset: Absolute minimum resources for testing
 
 mysql:
   enabled: true
+  auth:
+    rootPassword: rootpw
+    database: appdb
+  primary:
+    tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 128Mi
 
 minio:
   enabled: true
+  auth:
+    rootUser: minio
+    rootPassword: minio123
+  defaultBuckets: warehouse
+  tolerations:
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
   persistence:
-    size: 2Gi
+    size: 1Gi
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
 
 kafka:
   enabled: true
-
-lakekeeper:
-  enabled: true
-
-spark:
-  enabled: true
-  streamingJob:
-    enabled: true
-  thriftServer:
+  zookeeper:
     enabled: false
-
-superset:
-  enabled: false
+  controller:
+    replicaCount: 1
+    tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 300m
+        memory: 256Mi
+  broker:
+    replicaCount: 1
+    tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 300m
+        memory: 256Mi
