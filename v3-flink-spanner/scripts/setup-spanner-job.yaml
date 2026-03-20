@@ -1,0 +1,88 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: spanner-setup
+spec:
+  template:
+    spec:
+      containers:
+      - name: gcloud-cli
+        image: gcr.io/google.com/cloudsdktool/cloud-sdk:latest
+        command:
+        - /bin/bash
+        - -c
+        - |
+          set -e
+          echo "Installing Spanner emulator components..."
+          # The emulator setup
+          export SPANNER_EMULATOR_HOST=spanner-emulator:9010
+          export CLOUDSPANNER_EMULATOR_HOST=spanner-emulator:9010
+
+          echo "Waiting for Spanner emulator to be ready..."
+          until nc -z spanner-emulator 9010; do
+            echo "Waiting for spanner-emulator:9010..."
+            sleep 2
+          done
+          echo "Spanner emulator is ready!"
+
+          # Create instance
+          echo "Creating Spanner instance..."
+          gcloud spanner instances create test-instance \
+            --config=emulator-config \
+            --description='Test instance' \
+            --nodes=1 || echo "Instance may already exist"
+
+          # Create database
+          echo "Creating Spanner database..."
+          gcloud spanner databases create ecommerce --instance=test-instance || echo "Database may already exist"
+
+          # Create tables
+          echo "Creating tables..."
+          gcloud spanner databases ddl update ecommerce --instance=test-instance \
+            --ddl='CREATE TABLE customers (
+                customer_id INT64 NOT NULL,
+                email STRING(100),
+                name STRING(100),
+                created_at TIMESTAMP,
+                updated_at TIMESTAMP
+              ) PRIMARY KEY (customer_id);
+
+              CREATE TABLE products (
+                product_id INT64 NOT NULL,
+                sku STRING(50),
+                name STRING(200),
+                price NUMERIC,
+                category STRING(50),
+                created_at TIMESTAMP
+              ) PRIMARY KEY (product_id);
+
+              CREATE TABLE orders (
+                order_id INT64 NOT NULL,
+                customer_id INT64 NOT NULL,
+                product_id INT64 NOT NULL,
+                quantity INT64 NOT NULL,
+                total_amount NUMERIC,
+                order_status STRING(20),
+                created_at TIMESTAMP,
+                updated_at TIMESTAMP,
+                FOREIGN KEY (customer_id) REFERENCES customers(customer_id),
+                FOREIGN KEY (product_id) REFERENCES products(product_id)
+              ) PRIMARY KEY (order_id);' || echo "Tables may already exist"
+
+          # Create change stream
+          echo "Creating change stream..."
+          gcloud spanner databases ddl update ecommerce --instance=test-instance \
+            --ddl='CREATE CHANGE STREAM ecommerce_change_stream
+              FOR customers, products, orders
+              OPTIONS (
+                retention_period = ''1h'',
+                capture_value_change_type = ''NEW_ROW_AND_OLD_ROW''
+              );' || echo "Change stream may already exist"
+
+          echo ""
+          echo "=== Setup Complete ==="
+          gcloud spanner instances list
+          echo ""
+          gcloud spanner databases list --instance=test-instance
+      restartPolicy: Never
+  backoffLimit: 3

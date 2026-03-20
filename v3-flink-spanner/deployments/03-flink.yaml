@@ -1,0 +1,207 @@
+# Flink Cluster Deployment
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flink-config
+  namespace: default
+data:
+  flink-conf.yaml: |
+    jobmanager.rpc.address: flink-jobmanager
+    jobmanager.rpc.port: 6123
+    jobmanager.blob.server.port: 6124
+    jobmanager.memory.process.size: 1600m
+    taskmanager.memory.process.size: 1728m
+    taskmanager.numberOfTaskSlots: 3
+    parallelism.default: 1
+    blob.server.port: 6124
+    classloader.resolve-order: parent-first
+    state.backend: hashmap
+    state.checkpoints.dir: file:///tmp/flink-checkpoints
+    execution.checkpointing.interval: 5000
+    execution.checkpointing.mode: exactly_once
+    execution.checkpointing.timeout: 60000
+    execution.checkpointing.min-pause: 10000
+    execution.checkpointing.max-concurrent-checkpoints: 1
+    restart-strategy: fixed-delay
+    restart-strategy.fixed-delay.attempts: 3
+    restart-strategy.fixed-delay.delay: 10000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: flink-jobmanager
+  namespace: default
+spec:
+  selector:
+    app: flink
+    component: jobmanager
+  ports:
+  - name: rpc
+    port: 6123
+    targetPort: 6123
+  - name: blob
+    port: 6124
+    targetPort: 6124
+  - name: webui
+    port: 8081
+    targetPort: 8081
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: flink-taskmanager
+  namespace: default
+spec:
+  selector:
+    app: flink
+    component: taskmanager
+  ports:
+  - name: rpc
+    port: 6122
+    targetPort: 6122
+  - name: data
+    port: 6121
+    targetPort: 6121
+  - name: webui
+    port: 8082
+    targetPort: 8082
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flink-jobmanager
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flink
+      component: jobmanager
+  template:
+    metadata:
+      labels:
+        app: flink
+        component: jobmanager
+    spec:
+      containers:
+      - name: jobmanager
+        image: flink:1.19.1
+        command:
+        - /bin/bash
+        - -c
+        - |
+          $FLINK_HOME/bin/jobmanager.sh start-foreground
+        ports:
+        - containerPort: 6123
+          name: rpc
+        - containerPort: 6124
+          name: blob
+        - containerPort: 8081
+          name: webui
+        env:
+        - name: JOB_MANAGER_RPC_ADDRESS
+          value: "flink-jobmanager"
+        volumeMounts:
+        - name: flink-config
+          mountPath: /opt/flink/conf/flink-conf.yaml
+          subPath: flink-conf.yaml
+        livenessProbe:
+          tcpSocket:
+            port: 6123
+          initialDelaySeconds: 30
+          periodSeconds: 60
+        readinessProbe:
+          tcpSocket:
+            port: 6123
+          initialDelaySeconds: 30
+          periodSeconds: 60
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+      volumes:
+      - name: flink-config
+        configMap:
+          name: flink-config
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flink-taskmanager
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flink
+      component: taskmanager
+  template:
+    metadata:
+      labels:
+        app: flink
+        component: taskmanager
+    spec:
+      containers:
+      - name: taskmanager
+        image: flink:1.19.1
+        command:
+        - /bin/bash
+        - -c
+        - |
+          $FLINK_HOME/bin/taskmanager.sh start-foreground
+        ports:
+        - containerPort: 6122
+          name: rpc
+        - containerPort: 6121
+          name: data
+        - containerPort: 8082
+          name: webui
+        env:
+        - name: JOB_MANAGER_RPC_ADDRESS
+          value: "flink-jobmanager"
+        - name: ICEBERG_CATALOG_URI
+          value: "http://iceberg-rest-catalog:8181"
+        - name: ICEBERG_WAREHOUSE
+          value: "s3://warehouse"
+        - name: ICEBERG_NAMESPACE
+          value: "ecommerce"
+        - name: ICEBERG_USE_REST_CATALOG
+          value: "true"
+        - name: MINIO_ENDPOINT
+          value: "http://minio:9000"
+        - name: AWS_ACCESS_KEY_ID
+          value: "minioadmin"
+        - name: AWS_SECRET_ACCESS_KEY
+          value: "minioadmin"
+        - name: AWS_REGION
+          value: "us-east-1"
+        volumeMounts:
+        - name: flink-config
+          mountPath: /opt/flink/conf/flink-conf.yaml
+          subPath: flink-conf.yaml
+        startupProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - ps aux | grep java | grep TaskManager | grep -v grep
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 30
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+      volumes:
+      - name: flink-config
+        configMap:
+          name: flink-config

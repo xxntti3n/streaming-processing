@@ -1,0 +1,120 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: spanner-setup
+spec:
+  template:
+    spec:
+      containers:
+      - name: spanner-setup
+        image: python:3.11-slim
+        command:
+        - /bin/sh
+        - -c
+        - |
+          set -e
+          pip install google-cloud-spanner grpcio -q
+
+          echo "Waiting for Spanner emulator..."
+          until nc -z spanner-emulator 9010; do
+            echo "Waiting for spanner-emulator:9010..."
+            sleep 2
+          done
+          echo "Spanner emulator is ready!"
+
+          export SPANNER_EMULATOR_HOST=spanner-emulator:9010
+
+          # Create Python script for setup
+          cat > /tmp/setup_spanner.py << 'PYEOF'
+          from google.cloud import spanner
+          import os
+
+          emulator_host = os.environ.get('SPANNER_EMULATOR_HOST', 'spanner-emulator:9010')
+          project_id = 'test-project'
+          instance_id = 'test-instance'
+          database_id = 'ecommerce'
+
+          # Connect to emulator
+          spanner_client = spanner.Client(project=project_id)
+          spanner_client._emulator_host = emulator_host
+
+          # Create instance
+          print(f"Creating instance {instance_id}...")
+          try:
+              instance = spanner_client.instance(instance_id)
+              instance.create(config='emulator-config', node_count=1)
+              print(f"Instance {instance_id} created")
+          except Exception as e:
+              if 'AlreadyExists' in str(e) or 'already exists' in str(e):
+                  print(f"Instance {instance_id} already exists")
+                  instance = spanner_client.instance(instance_id)
+              else:
+                  raise
+
+          # Create database with tables
+          print(f"Creating database {database_id}...")
+          database = instance.database(database_id)
+
+          create_statements = [
+              '''CREATE TABLE customers (
+                  customer_id INT64 NOT NULL,
+                  email STRING(100),
+                  name STRING(100),
+                  created_at TIMESTAMP,
+                  updated_at TIMESTAMP
+              ) PRIMARY KEY (customer_id)''',
+
+              '''CREATE TABLE products (
+                  product_id INT64 NOT NULL,
+                  sku STRING(50),
+                  name STRING(200),
+                  price NUMERIC,
+                  category STRING(50),
+                  created_at TIMESTAMP
+              ) PRIMARY KEY (product_id)''',
+
+              '''CREATE TABLE orders (
+                  order_id INT64 NOT NULL,
+                  customer_id INT64 NOT NULL,
+                  product_id INT64 NOT NULL,
+                  quantity INT64 NOT NULL,
+                  total_amount NUMERIC,
+                  order_status STRING(20),
+                  created_at TIMESTAMP,
+                  updated_at TIMESTAMP,
+                  FOREIGN KEY (customer_id) REFERENCES customers(customer_id),
+                  FOREIGN KEY (product_id) REFERENCES products(product_id)
+              ) PRIMARY KEY (order_id)''',
+
+              '''CREATE CHANGE STREAM ecommerce_change_stream
+              FOR customers, products, orders
+              OPTIONS (
+                  retention_period = '1h',
+                  capture_value_change_type = 'NEW_ROW_AND_OLD_ROW'
+              )'''
+          ]
+
+          try:
+              op = database.create(create_statements)
+              op.result()  # Wait for completion
+              print(f"Database {database_id} created with tables and change stream")
+          except Exception as e:
+              if 'AlreadyExists' in str(e) or 'already exists' in str(e):
+                  print(f"Database {database_id} already exists")
+              else:
+                  raise
+
+          # List what we have
+          print("\n=== Setup Complete ===")
+          print("Instances:")
+          for i in spanner_client.list_instances():
+              print(f"  - {i.name}")
+
+          print("\nDatabases:")
+          for d in instance.list_databases():
+              print(f"  - {d.name}")
+          PYEOF
+
+          python /tmp/setup_spanner.py
+      restartPolicy: Never
+  backoffLimit: 3
