@@ -88,6 +88,11 @@
 - Examples: `[v1/spark-jobs/streaming-processor/src/main/scala/streaming/CDCContinuousProcessor.scala]`
 - Pattern: Object-oriented with streaming context
 
+**RisingWave CDC Pipeline:**
+- Purpose: SQL-based CDC pipeline definition
+- Examples: `[v4-rising-wave/sql/02-risingwave-cdc.sql]`
+- Pattern: Declarative SQL with CDC source definitions
+
 ## Entry Points
 
 **Spark CDC Processor (V1):**
@@ -102,8 +107,14 @@
 
 **RisingWave CDC Pipeline (V4):**
 - Location: `[v4-rising-wave/sql/02-risingwave-cdc.sql]`
-- Triggers: RisingWave SQL execution
+- Triggers: RisingWave SQL execution via `docker-compose.yml`
 - Responsibilities: PostgreSQL CDC, Iceberg sink creation
+- Dependencies: PostgreSQL, MinIO services defined in `v4-rising-wave/docker-compose.yml`
+
+**MinIO Initialization:**
+- Location: `[v4-rising-wave/docker-compose.yml]` (mc service)
+- Purpose: Creates required buckets for Iceberg storage
+- Triggers: Automatic after MinIO startup
 
 ## Error Handling
 
@@ -114,6 +125,7 @@
 - Dead letter queue for failed records
 - Schema evolution support
 - Checkpoint-based recovery for exactly-once semantics
+- Health checks for all critical services in Docker Compose
 
 ## Cross-Cutting Concerns
 
@@ -131,6 +143,7 @@
 - Service-to-service authentication
 - Kubernetes RBAC for deployments
 - API key management for external services
+- Environment-based configuration for development setups
 
 ---
 
