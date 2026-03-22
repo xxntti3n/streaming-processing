@@ -67,6 +67,74 @@ services:
       exit 0;
       "
 
+  # RisingWave Standalone - Stream Processing Engine
+  risingwave:
+    image: ${RW_IMAGE:-risingwavelabs/risingwave:v2.7.1}
+    container_name: risingwave
+    command: "standalone --meta-opts=\" \
+                    --listen-addr 0.0.0.0:5690 \
+                    --advertise-addr 0.0.0.0:5690 \
+                    --dashboard-host 0.0.0.0:5691 \
+                    --backend sql \
+                    --sql-endpoint postgres://postgres:postgres@postgres:5432/metadata \
+                    --state-store hummock+minio://hummockadmin:hummockadmin@minio:9301/hummock001 \
+                    --data-directory hummock_001 \
+                    --config-path /risingwave.toml\" \
+                 --compute-opts=\" \
+                    --config-path /risingwave.toml \
+                    --listen-addr 0.0.0.0:5688 \
+                    --advertise-addr 0.0.0.0:5688 \
+                    --async-stack-trace verbose \
+                    --parallelism 2 \
+                    --total-memory-bytes 4294967296 \
+                    --role both \
+                    --meta-address http://0.0.0.0:5690 \
+                    --memory-manager-target-bytes 4294967296\" \
+                 --frontend-opts=\" \
+                   --config-path /risingwave.toml \
+                   --listen-addr 0.0.0.0:4566 \
+                   --advertise-addr 0.0.0.0:4566 \
+                   --health-check-listener-addr 0.0.0.0:6786 \
+                   --meta-addr http://0.0.0.0:5690 \
+                   --frontend-total-memory-bytes=2147483648\" \
+                 --compactor-opts=\" \
+                   --listen-addr 0.0.0.0:6660 \
+                   --advertise-addr 0.0.0.0:6660 \
+                   --meta-address http://0.0.0.0:5690 \
+                   --compactor-total-memory-bytes=1073741824\""
+    ports:
+      - "4566:4566"   # SQL frontend
+      - "5690:5690"   # Meta
+      - "5691:5691"   # Dashboard
+      - "6786:6786"   # Health check
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      RUST_BACKTRACE: "1"
+      ENABLE_TELEMETRY: "false"
+      RW_SECRET_STORE_PRIVATE_KEY_HEX: ${RW_SECRET_STORE_PRIVATE_KEY_HEX:-0123456789abcdef0123456789abcdef}
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - bash -c 'printf "GET / HTTP/1.1\n\n" > /dev/tcp/127.0.0.1/5688; exit $$?;'
+        - bash -c '> /dev/tcp/127.0.0.1/4566; exit $$?;'
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+
 volumes:
   postgres_data:
+    driver: local
   minio_data:
+    driver: local
