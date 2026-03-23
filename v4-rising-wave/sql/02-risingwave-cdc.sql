@@ -1,5 +1,5 @@
 -- ============================================================================
--- RisingWave CDC Source and Iceberg Sink Configuration
+-- RisingWave CDC Source and JDBC Sink Configuration
 -- ============================================================================
 
 -- Set CDC options for better behavior
@@ -13,16 +13,6 @@ SET sink_decouple = false;
 CREATE SECRET IF NOT EXISTS postgres_pwd WITH (
     backend = 'meta'
 ) AS 'postgres';
-
--- MinIO access key secret
-CREATE SECRET IF NOT EXISTS minio_access_key WITH (
-    backend = 'meta'
-) AS 'hummockadmin';
-
--- MinIO secret key secret
-CREATE SECRET IF NOT EXISTS minio_secret_key WITH (
-    backend = 'meta'
-) AS 'hummockadmin';
 
 -- ============================================================================
 -- PostgreSQL CDC Sources
@@ -67,43 +57,27 @@ CREATE TABLE IF NOT EXISTS orders_cdc (
 );
 
 -- ============================================================================
--- Iceberg Sinks
+-- JDBC Sinks (Write CDC data back to PostgreSQL)
 -- ============================================================================
 
--- Customers Iceberg Sink
-CREATE SINK IF NOT EXISTS customers_iceberg_sink
+-- Customers JDBC Sink
+CREATE SINK IF NOT EXISTS customers_jdbc_sink
+FROM customers_cdc
 WITH (
-    connector = 'iceberg',
+    connector = 'jdbc',
     type = 'upsert',
-    primary_key = 'id',
-    warehouse.path = 's3a://iceberg-data',
-    s3.endpoint = 'http://minio:9301',
-    s3.access.key = SECRET minio_access_key,
-    s3.secret.key = SECRET minio_secret_key,
-    s3.region = 'us-east-1',
-    catalog.type = 'storage',
-    catalog.name = 'demo',
-    database.name = 'mydb',
-    table.name = 'customers',
-    create_table_if_not_exists = 'true'
-)
-AS SELECT * FROM customers_cdc;
+    jdbc.url = 'jdbc:postgresql://postgres:5432/mydb?user=postgres&password=postgres',
+    table.name = 'customers_sink',
+    primary_key = 'id'
+);
 
--- Orders Iceberg Sink
-CREATE SINK IF NOT EXISTS orders_iceberg_sink
+-- Orders JDBC Sink
+CREATE SINK IF NOT EXISTS orders_jdbc_sink
+FROM orders_cdc
 WITH (
-    connector = 'iceberg',
+    connector = 'jdbc',
     type = 'upsert',
-    primary_key = 'id',
-    warehouse.path = 's3a://iceberg-data',
-    s3.endpoint = 'http://minio:9301',
-    s3.access.key = SECRET minio_access_key,
-    s3.secret.key = SECRET minio_secret_key,
-    s3.region = 'us-east-1',
-    catalog.type = 'storage',
-    catalog.name = 'demo',
-    database.name = 'mydb',
-    table.name = 'orders',
-    create_table_if_not_exists = 'true'
-)
-AS SELECT * FROM orders_cdc;
+    jdbc.url = 'jdbc:postgresql://postgres:5432/mydb?user=postgres&password=postgres',
+    table.name = 'orders_sink',
+    primary_key = 'id'
+);

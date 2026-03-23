@@ -1,6 +1,6 @@
-# PostgreSQL CDC to Iceberg via RisingWave
+# PostgreSQL CDC Pipeline via RisingWave
 
-A streaming data pipeline that captures Change Data Capture (CDC) events from PostgreSQL and writes them to MinIO in Apache Iceberg format using RisingWave.
+A streaming data pipeline that captures Change Data Capture (CDC) events from PostgreSQL and processes them through RisingWave with **both JDBC and Iceberg sink outputs**.
 
 ## Quick Start
 
@@ -24,13 +24,27 @@ cd v4-rising-wave
 ## Architecture
 
 ```
-┌──────────────┐         ┌─────────────────────┐         ┌─────────────┐
-│  PostgreSQL  │────────▶│    RisingWave       │────────▶│    MinIO    │
-│   (source)   │   CDC   │  (Stream Process)   │  Sink   │  (Iceberg)  │
-│              │         │                     │         │             │
-│  port: 5432  │         │  port: 4566 (SQL)   │         │  port: 9301 │
-└──────────────┘         │  port: 5691 (UI)    │         │  port: 9400 │
-                         └─────────────────────┘         └─────────────┘
+┌──────────────┐         ┌─────────────────────┐         ┌──────────────┐
+│  PostgreSQL  │────────▶│    RisingWave       │────────▶│  PostgreSQL  │
+│   (source)   │   CDC   │  (Stream Process)   │  Sink   │   (output)   │
+│              │         │                     │  JDBC   │  *_sink tbls │
+│  port: 5432  │         │  port: 4566 (SQL)   │         └──────────────┘
+└──────────────┘         │  port: 5691 (UI)    │
+                         └─────────────────────┘
+                                 ▲
+                                 │
+                         ┌────────┴────────┐
+                         │     MinIO       │
+                         │ (Hummock Store) │
+                         │  port: 9301     │
+                         └─────────────────┘
+                                 ▲
+                                 │
+                         ┌────────┴────────┐
+                         │   Lakekeeper    │
+                         │ (Iceberg REST)  │
+                         │   port: 8181    │
+                         └─────────────────┘
 ```
 
 ## Features
@@ -38,29 +52,34 @@ cd v4-rising-wave
 - ✅ **PostgreSQL CDC**: Captures changes from PostgreSQL using logical replication
 - ✅ **Initial Snapshot**: Automatically snapshots existing data
 - ✅ **Real-time Streaming**: Changes propagate in seconds
-- ✅ **Iceberg Format**: Data stored in Apache Iceberg format
+- ✅ **JDBC Sink**: CDC data written to PostgreSQL sink tables (near real-time)
+- ✅ **Iceberg Sink**: CDC data written to Iceberg tables in MinIO (batch commits)
+- ✅ **Lakekeeper Catalog**: Self-hosted Iceberg REST catalog for metadata management
 - ✅ **Upsert Support**: Handles inserts, updates, and deletes
-- ✅ **Minimal Resources**: Runs on ~6GB RAM (designed for 16GB dev machines)
+- ✅ **Minimal Resources**: Runs on ~8GB RAM (designed for 16GB dev machines)
 - ✅ **Docker Compose**: Single command deployment
 
 ## Services
 
 | Service | Port | Description | Access |
 |---------|------|-------------|--------|
-| PostgreSQL | 5432 | Source database with CDC enabled | `postgres://postgres:postgres@localhost:5432/mydb` |
-| RisingWave SQL | 4566 | SQL interface for queries | `docker exec -it risingwave psql -h localhost -p 4566 -d dev` |
+| PostgreSQL (source) | 5432 | Source database with CDC enabled | `postgres://postgres:postgres@localhost:5432/mydb` |
+| RisingWave SQL | 4566 | SQL interface for queries | `docker exec postgres psql -h risingwave -p 4566 -d dev` |
 | RisingWave UI | 5691 | Web dashboard | http://localhost:5691 |
-| MinIO API | 9301 | S3-compatible API | http://localhost:9301 |
+| MinIO API | 9301 | S3-compatible storage | http://localhost:9301 |
 | MinIO Console | 9400 | Web UI for MinIO | http://localhost:9400 (hummockadmin/hummockadmin) |
+| Lakekeeper | 8181 | Iceberg REST Catalog | http://localhost:8181/catalog/ |
+| Lakekeeper DB | 5433 | PostgreSQL for Lakekeeper metadata | `postgres://postgres:postgres@localhost:5433/postgres` |
 
 ## Resource Requirements
 
 | Service | Memory | CPU |
 |---------|--------|-----|
-| PostgreSQL | 512MB | 0.5 |
+| PostgreSQL (source) | 512MB | 0.5 |
 | RisingWave | 4GB | 2 |
 | MinIO | 512MB | 0.5 |
-| **Total** | ~6GB | ~3 |
+| Lakekeeper + DB | 2GB | 1 |
+| **Total** | ~8GB | ~4 |
 
 Designed for development machines with 16GB RAM.
 
@@ -82,9 +101,15 @@ Designed for development machines with 16GB RAM.
 - `status` (VARCHAR)
 - `created_at` (TIMESTAMP)
 
-### Iceberg Tables
+### Sink Outputs
 
-Data is written to `s3a://iceberg-data/mydb/{table_name}/` in Iceberg format.
+**JDBC Sink** (near real-time, sub-second latency):
+- `customers_sink` - Same schema as source
+- `orders_sink` - Same schema as source
+
+**Iceberg Sink** (batch commits, ~30-60 seconds):
+- `mydb.customers` - Stored in MinIO at `s3://hummock001/risingwave-iceberg/`
+- `mydb.orders` - Stored in MinIO at `s3://hummock001/risingwave-iceberg/`
 
 ## Scripts
 
@@ -104,20 +129,36 @@ docker exec postgres psql -U postgres -d mydb -c "SELECT * FROM orders;"
 
 ### Check RisingWave CDC stream
 ```bash
-docker exec risingwave psql -h localhost -p 4566 -d dev -c "SELECT * FROM orders_cdc;"
+docker exec postgres psql -h risingwave -p 4566 -d dev -c "SELECT * FROM orders_cdc;"
 ```
 
-### Check Iceberg snapshots
+### Check JDBC sink output
 ```bash
-docker exec risingwave psql -h localhost -p 4566 -d dev -c "
-  SELECT * FROM rw_iceberg_snapshots
-  WHERE source_name = 'orders_iceberg_sink';
-"
+docker exec postgres psql -U postgres -d mydb -c "SELECT * FROM orders_sink;"
 ```
 
-### List MinIO Iceberg files
+### Check Iceberg snapshots via Lakekeeper API
 ```bash
-docker exec mc sh -c "mc tree minio/iceberg-data/"
+# Get warehouse ID
+WAREHOUSE_ID=$(curl -s http://localhost:8181/management/v1/warehouse | jq -r '.warehouses[0]["warehouse-id"]')
+
+# Check customers table snapshots
+curl -s "http://localhost:8181/catalog/v1/${WAREHOUSE_ID}/namespaces/mydb/tables/customers" | jq '.metadata.snapshots'
+```
+
+### Test CDC with insert/update/delete
+```bash
+# Insert
+docker exec postgres psql -U postgres -d mydb -c "INSERT INTO customers (name, email) VALUES ('Test', 'test@test.com') RETURNING *;"
+
+# Wait 5 seconds, check JDBC sink (near real-time)
+docker exec postgres psql -U postgres -d mydb -c "SELECT * FROM customers_sink WHERE name = 'Test';"
+
+# Wait 60 seconds, check Iceberg (batch commit)
+curl -s "http://localhost:8181/catalog/v1/${WAREHOUSE_ID}/namespaces/mydb/tables/customers" | jq '.metadata.snapshots[-1].summary'
+
+# Update
+docker exec postgres psql -U postgres -d mydb -c "UPDATE customers SET email = 'updated@test.com' WHERE name = 'Test';"
 ```
 
 ## Troubleshooting
@@ -147,10 +188,68 @@ docker compose down -v  # Removes volumes
 ./scripts/start.sh
 ```
 
+## Iceberg with Lakekeeper
+
+This project uses **Lakekeeper**, a self-hosted Iceberg REST catalog, enabling RisingWave to write CDC data to Iceberg tables in MinIO.
+
+### Key Features
+
+- **Self-hosted**: No external services required
+- **REST API**: Full Iceberg REST catalog implementation
+- **MinIO Compatible**: Works with S3-compatible storage
+- **Time Travel**: Snapshot-based for historical queries
+
+### Creating New Iceberg Tables
+
+1. Create namespace and table via Lakekeeper API:
+```bash
+WAREHOUSE_ID=$(curl -s http://localhost:8181/management/v1/warehouse | jq -r '.warehouses[0]["warehouse-id"]')
+
+# Create namespace
+curl -X POST "http://localhost:8181/catalog/v1/${WAREHOUSE_ID}/namespaces" \
+  -H "Content-Type: application/json" \
+  -d '{"namespace": ["mydb"]}'
+
+# Create table (use timestamp not timestamptz)
+curl -X POST "http://localhost:8181/catalog/v1/${WAREHOUSE_ID}/namespaces/mydb/tables" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "my_table",
+    "schema": {
+      "type": "struct",
+      "fields": [
+        {"id": 1, "name": "id", "type": "long", "required": true},
+        {"id": 2, "name": "data", "type": "string", "required": true}
+      ]
+    },
+    "partition-spec": {"spec-id": 0, "fields": []}
+  }'
+```
+
+2. Create Iceberg sink in RisingWave:
+```sql
+CREATE SINK my_table_iceberg_sink
+FROM my_table_cdc
+WITH (
+    connector = 'iceberg',
+    type = 'upsert',
+    primary_key = 'id',
+    warehouse.path = 'risingwave-warehouse',
+    database.name = 'mydb',
+    table.name = 'my_table',
+    catalog.type = 'rest',
+    catalog.uri = 'http://lakekeeper:8181/catalog/',
+    s3.endpoint = 'http://minio:9301',
+    s3.region = 'us-east-1',
+    s3.access.key = 'hummockadmin',
+    s3.secret.key = 'hummockadmin',
+    s3.path.style.access = 'true'
+);
+```
+
 ## Documentation
 
-- [Design Spec](docs/superpowers/specs/2025-03-22-postgres-cdc-risingwave-iceberg-design.md)
-- [Implementation Plan](docs/superpowers/plans/2025-03-22-postgres-cdc-risingwave-iceberg.md)
+- [Iceberg Research](docs/iceberg-research.md) - Investigation into RisingWave Iceberg support
 
 ## License
 

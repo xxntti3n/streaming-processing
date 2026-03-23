@@ -24,6 +24,28 @@ CREATE TABLE IF NOT EXISTS orders (
 CREATE INDEX idx_orders_customer_id ON orders(customer_id);
 CREATE INDEX idx_orders_date ON orders(order_date);
 
+-- ============================================================================
+-- JDBC Sink Tables (CDC data will be written here by RisingWave)
+-- ============================================================================
+
+-- Customers sink table
+CREATE TABLE IF NOT EXISTS customers_sink (
+    id BIGINT PRIMARY KEY,
+    name VARCHAR NOT NULL,
+    email VARCHAR NOT NULL,
+    created_at TIMESTAMP
+);
+
+-- Orders sink table
+CREATE TABLE IF NOT EXISTS orders_sink (
+    id BIGINT PRIMARY KEY,
+    customer_id BIGINT NOT NULL,
+    order_date DATE NOT NULL,
+    amount DECIMAL(10, 2) NOT NULL,
+    status VARCHAR NOT NULL,
+    created_at TIMESTAMP
+);
+
 -- Insert sample data
 INSERT INTO customers (name, email) VALUES
     ('Alice Johnson', 'alice@example.com'),
