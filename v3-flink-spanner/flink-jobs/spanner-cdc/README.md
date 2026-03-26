@@ -579,6 +579,34 @@ For production deployments, consider:
    execution.checkpointing.interval: 10000  # Increase to 10 seconds
    ```
 
+### Performance Degradation
+
+**Symptoms**: High CPU usage, checkpoint failures, backpressure
+
+**Solutions**:
+
+1. Increase checkpoint interval via environment variable
+   ```bash
+   export FLINK_CHECKPOINT_INTERVAL_MS=3000  # Back to 3 seconds
+   ./scripts/submit-cdc-job.sh
+   ```
+
+2. Or revert to original 5-second interval
+   ```bash
+   export FLINK_CHECKPOINT_INTERVAL_MS=5000
+   ./scripts/submit-cdc-job.sh
+   ```
+
+3. Check checkpoint duration in Flink UI
+   - If checkpoint duration > interval, increase interval
+   - Rule of thumb: checkpoint duration should be < 50% of interval
+
+4. Monitor for checkpoint storms
+   ```bash
+   # Check checkpoint frequency
+   kubectl logs -l app=flink,component=taskmanager | grep -i "completed checkpoint"
+   ```
+
 ### Connection Issues
 
 **Symptoms**: Cannot connect to Spanner, MinIO, or Iceberg catalog
