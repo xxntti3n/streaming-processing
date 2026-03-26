@@ -17,10 +17,10 @@ data:
     classloader.resolve-order: parent-first
     state.backend: hashmap
     state.checkpoints.dir: file:///tmp/flink-checkpoints
-    execution.checkpointing.interval: 5000
+    execution.checkpointing.interval: 1000
     execution.checkpointing.mode: exactly_once
-    execution.checkpointing.timeout: 60000
-    execution.checkpointing.min-pause: 10000
+    execution.checkpointing.timeout: 30000
+    execution.checkpointing.min-pause: 500
     execution.checkpointing.max-concurrent-checkpoints: 1
     restart-strategy: fixed-delay
     restart-strategy.fixed-delay.attempts: 3
