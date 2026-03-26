@@ -399,6 +399,7 @@ kubectl logs -l app=iceberg-rest-catalog -f
 | `ICEBERG_WAREHOUSE` | `s3a://warehouse/` | MinIO S3 path for Iceberg data |
 | `MINIO_ENDPOINT` | `http://minio:9000` | MinIO endpoint for S3 storage |
 | `FLINK_STATE_BACKEND` | `file:///tmp/flink-checkpoints` | Checkpoint storage location |
+| `FLINK_CHECKPOINT_INTERVAL_MS` | `1000` | Checkpoint interval in milliseconds (lower = lower latency, higher = less overhead) |
 | `NAMESPACE` | `default` | Kubernetes namespace |
 | `PARALLELISM` | `1` | Flink job parallelism |
 | `PROJECT_ID` | `test-project` | Project ID for Iceberg namespace |
@@ -415,10 +416,10 @@ state.backend: jobmanager
 state.checkpoints.dir: file:///tmp/flink-checkpoints
 
 # Checkpointing settings
-execution.checkpointing.interval: 5000        # 5 seconds
+execution.checkpointing.interval: 1000         # 1 second (was 5000)
 execution.checkpointing.mode: exactly_once
-execution.checkpointing.timeout: 60000        # 60 seconds
-execution.checkpointing.min-pause: 10000      # 10 seconds
+execution.checkpointing.timeout: 30000         # 30 seconds (was 60000)
+execution.checkpointing.min-pause: 500         # 500ms (was 10000)
 execution.checkpointing.max-concurrent-checkpoints: 1
 
 # Restart strategy
