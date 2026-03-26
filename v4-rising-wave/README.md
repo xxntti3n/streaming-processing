@@ -254,3 +254,51 @@ WITH (
 ## License
 
 MIT
+
+## dbt Integration
+
+This project includes **dbt-risingwave** for transformation management.
+
+### dbt Setup
+
+```bash
+# Install dbt-risingwave
+pip install dbt-risingwave
+
+# Run dbt models
+cd /path/to/project
+export DBT_PROFILES_DIR=$(pwd)
+dbt run
+```
+
+### dbt Models
+
+| Layer | Models | Description |
+|-------|--------|-------------|
+| **Staging** | `stg_customers`, `stg_orders` | Clean CDC data |
+| **Intermediate** | `int_customer_orders` | Joined customer+orders |
+| **Mart** | `fct_customer_order_summary`, `fct_high_value_orders`, `dim_customer_spending_tier`, `fct_order_status_dashboard`, `fct_daily_order_metrics` | Business aggregates |
+
+### dbt Commands
+
+```bash
+# Run all models
+dbt run
+
+# Run specific model
+dbt run --select stg_customers
+
+# Run tests
+dbt test
+
+# List models
+dbt list
+
+# Show generated SQL
+dbt show --select stg_customers
+```
+
+### Documentation
+
+See [dbt/README.md](dbt/README.md) for full dbt documentation.
+

@@ -1,0 +1,36 @@
+name: 'risingwave_cdc'
+version: '1.0.0'
+config-version: 2
+
+profile: 'risingwave_cdc'
+
+model-paths: ["dbt/models"]
+seed-paths: ["dbt/seeds"]
+test-paths: ["dbt/tests"]
+analysis-paths: ["dbt/analyses"]
+macro-paths: ["dbt/macros"]
+target-path: "dbt/target"
+clean-targets:
+  - "dbt/target"
+  - "dbt/dbt_packages"
+
+models:
+  risingwave_cdc:
+    # Config indicated by a + applies to all files under models
+    staging:
+      +materialized: materialized_view
+      +schema: staging
+
+    intermediate:
+      +materialized: materialized_view
+      +schema: intermediate
+
+    marts:
+      +materialized: materialized_view
+      +schema: marts
+
+# Tests configuration
+tests:
+  risingwave_cdc:
+    +store_failures: true
+    +store_failures_as: materialized_view

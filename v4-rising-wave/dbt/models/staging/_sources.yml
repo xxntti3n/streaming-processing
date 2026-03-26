@@ -1,0 +1,51 @@
+# Sources and tests configuration
+# This defines the raw CDC tables from RisingWave
+
+version: 2
+
+sources:
+  - name: raw
+    description: "Raw CDC data from RisingWave"
+    schema: public
+    tables:
+      - name: customers_cdc
+        description: "Customer changes captured via CDC"
+        columns:
+          - name: id
+            description: "Primary key"
+            tests:
+              - unique
+              - not_null
+          - name: name
+            description: "Customer name"
+            tests:
+              - not_null
+          - name: email
+            description: "Customer email"
+            tests:
+              - unique
+              - not_null
+
+      - name: orders_cdc
+        description: "Order changes captured via CDC"
+        columns:
+          - name: id
+            description: "Primary key"
+            tests:
+              - unique
+              - not_null
+          - name: customer_id
+            description: "Foreign key to customers"
+            tests:
+              - not_null
+              - relationships:
+                  to: ref('stg_customers')
+                  field: customer_id
+          - name: amount
+            description: "Order amount"
+            tests:
+              - not_null
+          - name: status
+            description: "Order status"
+            tests:
+              - not_null

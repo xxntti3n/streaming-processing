@@ -1,0 +1,46 @@
+# Models documentation and tests for analytics mart
+
+version: 2
+
+models:
+  - name: fct_customer_order_summary
+    description: "Customer order summary with spending aggregates"
+    columns:
+      - name: customer_id
+        description: "Customer identifier"
+        tests:
+          - unique
+          - not_null
+      - name: total_spent
+        description: "Total amount spent across all orders"
+        tests:
+          - not_null
+
+  - name: fct_high_value_orders
+    description: "High value orders ($100 or more)"
+    tests:
+      - assert:
+          assert: total_spent >= 100
+
+  - name: dim_customer_spending_tier
+    description: "Customer classification by spending tier"
+    columns:
+      - name: customer_tier
+        description: "Bronze < $100, Silver $100-$500, Gold >= $500"
+        tests:
+          - not_null
+
+  - name: fct_order_status_dashboard
+    description: "Order metrics grouped by status"
+
+  - name: fct_daily_order_metrics
+    description: "Daily aggregated order metrics"
+    columns:
+      - name: metric_date
+        description: "Date of the metrics"
+        tests:
+          - not_null
+      - name: daily_revenue
+        description: "Total revenue for the day"
+        tests:
+          - not_null

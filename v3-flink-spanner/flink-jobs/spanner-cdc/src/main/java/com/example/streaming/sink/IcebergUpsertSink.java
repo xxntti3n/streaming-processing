@@ -50,7 +50,7 @@ public class IcebergUpsertSink extends RichSinkFunction<ChangeRecord> {
     private transient Catalog catalog;
     private transient Map<String, Table> tables;
     private transient Map<String, TableBuffer> buffers;
-    private transient FileIO s3FileIO;
+    private transient FileIO s3FileIO;  // Pre-configured FileIO for S3 writes
 
     public IcebergUpsertSink() {
         // Configuration will be read in open() method
@@ -60,43 +60,47 @@ public class IcebergUpsertSink extends RichSinkFunction<ChangeRecord> {
     public void open(org.apache.flink.configuration.Configuration parameters) {
         // Read environment variables in the TaskManager context
         this.catalogUri = System.getenv().getOrDefault("ICEBERG_CATALOG_URI", "http://iceberg-rest-catalog:8181");
-        this.warehousePath = System.getenv().getOrDefault("ICEBERG_WAREHOUSE", "s3://warehouse");
+        // Use s3a:// scheme for Hadoop FileIO compatibility
+        this.warehousePath = System.getenv().getOrDefault("ICEBERG_WAREHOUSE", "s3a://warehouse");
         this.namespace = System.getenv().getOrDefault("ICEBERG_NAMESPACE", "ecommerce");
         this.useRestCatalog = Boolean.parseBoolean(System.getenv().getOrDefault("ICEBERG_USE_REST_CATALOG", "true"));
         this.tables = new HashMap<>();
         this.buffers = new HashMap<>();
 
         String minioEndpoint = System.getenv().getOrDefault("MINIO_ENDPOINT", "http://minio:9000");
+        String accessKey = System.getenv().getOrDefault("MINIO_ACCESS_KEY", "minioadmin");
+        String secretKey = System.getenv().getOrDefault("MINIO_SECRET_KEY", "minioadmin");
 
-        // Configure Hadoop S3A filesystem for MinIO
-        // Note: We use s3a:// scheme for HadoopFileIO, but map s3:// to s3a://
+        // Create pre-configured HadoopFileIO for S3 writes
         Configuration conf = new Configuration();
         conf.set("fs.s3a.endpoint", minioEndpoint);
         conf.set("fs.s3a.path.style.access", "true");
-        conf.set("fs.s3a.access.key", "minioadmin");
-        conf.set("fs.s3a.secret.key", "minioadmin");
+        conf.set("fs.s3a.access.key", accessKey);
+        conf.set("fs.s3a.secret.key", secretKey);
         conf.set("fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem");
         conf.set("fs.s3a.connection.ssl.enabled", "false");
+        // Use in-memory buffering to avoid local temp file issues
         conf.set("fs.s3a.fast.upload", "true");
-        conf.set("fs.s3a.multipart.size", "10485760"); // 10MB
+        conf.set("fs.s3a.fast.upload.buffer", "array");
+        conf.set("fs.s3a.multipart.size", "10485760");
+        // Configure local filesystem for S3A temp operations
+        conf.set("fs.s3a.buffer.dir", "/tmp/s3a");
 
-        // Map s3:// scheme to s3a:// filesystem for local writes
-        conf.set("fs.s3.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem");
-        conf.set("fs.s3.endpoint", minioEndpoint);
-        conf.set("fs.s3.path.style.access", "true");
+        // Set Hadoop configuration globally for S3FileIO compatibility
+        org.apache.hadoop.fs.FileSystem.setDefaultUri(conf, new org.apache.hadoop.fs.Path("s3a://warehouse").toUri());
 
-        HadoopFileIO hadoopFileIO = new HadoopFileIO(conf);
-        this.s3FileIO = hadoopFileIO;
+        this.s3FileIO = new HadoopFileIO(conf);
 
         LOG.info("Iceberg sink initialized");
         LOG.info("  Catalog URI: {}", catalogUri);
         LOG.info("  Warehouse: {}", warehousePath);
         LOG.info("  Namespace: {}", namespace);
         LOG.info("  Use REST catalog: {}", useRestCatalog);
-        LOG.info("  HadoopFileIO initialized with S3A endpoint: {}", minioEndpoint);
+        LOG.info("  MinIO endpoint: {}", minioEndpoint);
+        LOG.info("  HadoopFileIO configured for S3A");
 
         try {
-            initializeCatalog();
+            initializeCatalog(minioEndpoint, accessKey, secretKey);
             initializeTables();
             LOG.info("Iceberg catalog and tables initialized successfully");
         } catch (Exception e) {
@@ -107,20 +111,26 @@ public class IcebergUpsertSink extends RichSinkFunction<ChangeRecord> {
     /**
      * Initialize Iceberg catalog with REST catalog and S3A configuration
      */
-    private void initializeCatalog() throws Exception {
+    private void initializeCatalog(String minioEndpoint, String accessKey, String secretKey) throws Exception {
         LOG.info("Initializing Iceberg REST catalog...");
-
-        String minioEndpoint = System.getenv().getOrDefault("MINIO_ENDPOINT", "http://minio:9000");
 
         // Configure catalog properties for MinIO using Hadoop S3A
         Map<String, String> properties = new HashMap<>();
         properties.put(CatalogProperties.URI, catalogUri);
         properties.put(CatalogProperties.WAREHOUSE_LOCATION, warehousePath);
 
-        // Use HadoopFileIO for better MinIO S3A compatibility
+        // Explicitly use HadoopFileIO to avoid S3FileIO (iceberg-aws)
         properties.put(CatalogProperties.FILE_IO_IMPL, "org.apache.iceberg.hadoop.HadoopFileIO");
 
-        LOG.info("Catalog properties: warehouse={}, io-impl=HadoopFileIO", warehousePath);
+        // Configure Hadoop S3A properties for the FileIO
+        // Note: These are client-side properties for HadoopFileIO
+        properties.put("fs.s3a.endpoint", minioEndpoint);
+        properties.put("fs.s3a.path.style.access", "true");
+        properties.put("fs.s3a.access.key", accessKey);
+        properties.put("fs.s3a.secret.key", secretKey);
+        properties.put("fs.s3a.connection.ssl.enabled", "false");
+
+        LOG.info("Catalog properties: warehouse={}, io-impl=HadoopFileIO, s3a.endpoint={}", warehousePath, minioEndpoint);
 
         // Create REST catalog - it implements Catalog directly
         RESTCatalog restCatalog = new RESTCatalog();
@@ -129,7 +139,6 @@ public class IcebergUpsertSink extends RichSinkFunction<ChangeRecord> {
         this.catalog = restCatalog;
 
         LOG.info("REST catalog initialized at {}", catalogUri);
-        LOG.info("Using Hadoop S3A filesystem with endpoint: {}", minioEndpoint);
     }
 
     /**
@@ -199,6 +208,7 @@ public class IcebergUpsertSink extends RichSinkFunction<ChangeRecord> {
         }
 
         // Buffer records in memory for batch writing
+        // Use pre-configured s3FileIO for S3 writes instead of table's default FileIO
         TableBuffer buffer = buffers.computeIfAbsent(tableName, k -> new TableBuffer(table, s3FileIO));
         buffer.addRecord(rowData);
 

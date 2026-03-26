@@ -36,6 +36,7 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-hummockadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-hummockadmin}
+      MINIO_API_CORS_ALLOW_ORIGIN: "*"
     ports:
       - "9301:9301"
       - "9400:9400"
@@ -63,6 +64,35 @@ services:
       /usr/bin/mc mb minio/hummock001 --ignore-existing;
       /usr/bin/mc mb minio/iceberg-data --ignore-existing;
       /usr/bin/mc anonymous set download minio/iceberg-data;
+      /usr/bin/mc anonymous set download minio/hummock001;
+      echo 'Configuring CORS for MinIO buckets...';
+      /usr/bin/mc cp /dev/stdin minio/cors.json << 'EOF'
+      {
+        "CORSRules": [
+          {
+            "AllowedOrigins": ["*"],
+            "AllowedMethods": ["GET", "HEAD", "POST", "PUT", "DELETE"],
+            "AllowedHeaders": ["*"],
+            "ExposeHeaders": ["ETag"],
+            "MaxAgeSeconds": 3600
+          }
+        ]
+      }
+      EOF
+      /usr/bin/mc admin config set minio/ cors;
+      /usr/bin/mc admin config set minio/ cors.json < /dev/stdin << 'EOF'
+      {
+        "CORSRules": [
+          {
+            "AllowedOrigins": ["*"],
+            "AllowedMethods": ["GET", "HEAD", "POST", "PUT", "DELETE", "OPTIONS"],
+            "AllowedHeaders": ["*"],
+            "ExposeHeaders": ["ETag", "x-amz-request-id"],
+            "MaxAgeSeconds": 3600
+          }
+        ]
+      }
+      EOF
       echo 'MinIO buckets initialized successfully';
       exit 0;
       "
@@ -206,7 +236,7 @@ services:
                     --advertise-addr 0.0.0.0:5690 \
                     --dashboard-host 0.0.0.0:5691 \
                     --backend sql \
-                    --sql-endpoint postgres://postgres:postgres@postgres:5432/metadata \
+                    --sql-endpoint postgres://postgres:postgres@postgres:5432/mydb \
                     --state-store hummock+minio://hummockadmin:hummockadmin@minio:9301/hummock001 \
                     --data-directory hummock_001\" \
                  --compute-opts=\" \

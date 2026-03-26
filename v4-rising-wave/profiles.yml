@@ -1,0 +1,31 @@
+# dbt profiles configuration for RisingWave CDC Pipeline
+# For local runs, use localhost. For Docker, use risingwave
+
+risingwave_cdc:
+  outputs:
+    dev:
+      type: risingwave
+      host: localhost  # Use 'risingwave' when running from within Docker network
+      user: root
+      pass: ""
+      dbname: dev
+      port: 4566
+      schema: public
+      # Connection settings
+      connect_timeout: 10
+      # Streaming parallelism
+      streaming_parallelism: 2
+      # Background DDL (run DDL in background, use WAIT before continuing)
+      background_ddl: true
+
+    docker:
+      type: risingwave
+      host: risingwave  # Used when running dbt from within Docker
+      user: root
+      pass: ""
+      dbname: dev
+      port: 4566
+      schema: public
+      connect_timeout: 10
+
+  target: dev
