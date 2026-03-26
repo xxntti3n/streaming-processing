@@ -72,45 +72,9 @@ spec:
 EOF
 
 # Deploy BigQuery emulator (using mock for now)
-echo "2. Deploying BigQuery emulator..."
-kubectl apply -f - << 'EOF'
-apiVersion: v1
-kind: Service
-metadata:
-  name: bigquery-emulator
-  namespace: default
-spec:
-  selector:
-    app: bigquery-emulator
-  ports:
-  - port: 9050
-    targetPort: 9050
-  type: ClusterIP
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: bigquery-emulator
-  namespace: default
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: bigquery-emulator
-  template:
-    metadata:
-      labels:
-        app: bigquery-emulator
-    spec:
-      containers:
-      - name: bigquery-emulator
-        image: ghcr.io/goccy/bigquery-emulator:latest
-        ports:
-        - containerPort: 9050
-        env:
-        - name: PROJECT
-          value: "test-project"
-EOF
+# NOTE: Skipped - ghcr.io/goccy/bigquery-emulator:latest doesn't support ARM64
+# The pipeline uses Iceberg sink, so BigQuery emulator is not required
+echo "2. Skipping BigQuery emulator (not needed for Iceberg sink)..."
 
 # Deploy Flink cluster
 echo "3. Deploying Flink cluster..."
@@ -128,6 +92,9 @@ spec:
   - name: rpc
     port: 6123
     targetPort: 6123
+  - name: blob
+    port: 6124
+    targetPort: 6124
   - name: ui
     port: 8081
     targetPort: 8081
@@ -157,6 +124,7 @@ spec:
         - jobmanager
         ports:
         - containerPort: 6123
+        - containerPort: 6124
         - containerPort: 8081
         env:
         - name: FLINK_PROPERTIES
