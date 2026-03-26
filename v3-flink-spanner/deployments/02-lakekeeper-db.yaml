@@ -1,0 +1,52 @@
+# Lakekeeper Database - Stores Iceberg catalog metadata
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: lakekeeper-db-pvc
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lakekeeper-db
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: lakekeeper-db
+  template:
+    metadata:
+      labels:
+        app: lakekeeper-db
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:16-alpine
+        env:
+        - name: POSTGRES_PASSWORD
+          value: postgres
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        ports:
+        - containerPort: 5432
+        volumeMounts:
+        - name: postgres-data
+          mountPath: /var/lib/postgresql/data/pgdata
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      volumes:
+      - name: postgres-data
+        persistentVolumeClaim:
+          claimName: lakekeeper-db-pvc

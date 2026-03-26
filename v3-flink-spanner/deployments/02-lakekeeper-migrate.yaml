@@ -1,0 +1,27 @@
+# Lakekeeper Migration - Initialize database schema
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: lakekeeper-migrate
+  namespace: default
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: migrate
+        image: quay.io/lakekeeper/catalog:latest-main
+        env:
+        - name: LAKEKEEPER__PG_ENCRYPTION_KEY
+          value: "This-is-NOT-Secure-for-production!"
+        - name: LAKEKEEPER__PG_DATABASE_URL_READ
+          value: postgresql://postgres:postgres@lakekeeper-db:5432/postgres
+        - name: LAKEKEEPER__PG_DATABASE_URL_WRITE
+          value: postgresql://postgres:postgres@lakekeeper-db:5432/postgres
+        - name: LAKEKEEPER__AUTHZ_BACKEND
+          value: allowall
+        command: ["migrate"]
+      initContainers:
+      - name: wait-for-db
+        image: busybox:1.36
+        command: ['sh', '-c', 'until nc -z lakekeeper-db 5432; do echo waiting for lakekeeper-db; sleep 2; done;']

@@ -1,0 +1,83 @@
+# Lakekeeper Bootstrap - Initialize warehouse
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: lakekeeper-bootstrap
+  namespace: default
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      backoffLimit: 5
+      containers:
+      - name: bootstrap
+        image: curlimages/curl:latest
+        command:
+        - /bin/sh
+        - -lc
+        - |
+          set -e
+          apk add --no-cache jq >/dev/null 2>&1
+
+          echo "Waiting for Lakekeeper to be ready..."
+          sleep 5
+
+          echo "Bootstrapping Lakekeeper..."
+          for attempt in 1 2 3 4 5; do
+            http=$$(curl -s -o /tmp/bootstrap.json -w "%{http_code}" -X POST \
+              -H "Content-Type: application/json" \
+              -d '{"accept-terms-of-use": true}' \
+              http://lakekeeper:8181/management/v1/bootstrap)
+
+            case "$$http" in
+              200|201) echo "✓ Successfully bootstrapped Lakekeeper!"; break ;;
+              400|409) echo "✓ Already bootstrapped or conflict; continuing..."; break ;;
+              *) echo "Bootstrap attempt $$attempt failed (HTTP $$http)"; \
+                 [ $$attempt -eq 5 ] && { cat /tmp/bootstrap.json 2>/dev/null || true; exit 1; }; \
+                 sleep $$((2 ** attempt)) ;;
+            esac
+          done
+
+          echo "Creating warehouse flink-warehouse..."
+          sleep 2
+          for attempt in 1 2 3 4 5; do
+            http=$$(curl -s -o /tmp/warehouse.json -w "%{http_code}" -X POST \
+              -H "Content-Type: application/json" \
+              -d '{
+                "warehouse-name": "flink-warehouse",
+                "delete-profile": { "type": "hard" },
+                "storage-credential": {
+                  "type": "s3",
+                  "credential-type": "access-key",
+                  "aws-access-key-id": "minioadmin",
+                  "aws-secret-access-key": "minioadmin"
+                },
+                "storage-profile": {
+                  "type": "s3",
+                  "bucket": "hummock001",
+                  "region": "us-east-1",
+                  "flavor": "s3-compat",
+                  "endpoint": "http://minio:9000",
+                  "path-style-access": true,
+                  "sts-enabled": false,
+                  "key-prefix": "flink-iceberg"
+                }
+              }' \
+              http://lakekeeper:8181/management/v1/warehouse)
+
+            case "$$http" in
+              200|201) echo "✓ Successfully created warehouse!"; break ;;
+              400|409) echo "✓ Warehouse already exists/overlaps; continuing..."; break ;;
+              *) echo "Warehouse creation attempt $$attempt failed (HTTP $$http)"; \
+                 [ $$attempt -eq 5 ] && { cat /tmp/warehouse.json 2>/dev/null || true; exit 1; }; \
+                 sleep $$((2 ** attempt)) ;;
+            esac
+          done
+
+          echo "🎉 Lakekeeper setup completed successfully!"
+          echo "Catalog endpoint: http://lakekeeper:8181/catalog/"
+          echo "Warehouse: flink-warehouse"
+      initContainers:
+      - name: wait-for-lakekeeper
+        image: busybox:1.36
+        command: ['sh', '-c', 'until nc -z lakekeeper 8181; do echo waiting for lakekeeper; sleep 2; done;']

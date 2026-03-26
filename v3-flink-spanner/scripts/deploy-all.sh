@@ -71,10 +71,89 @@ spec:
           value: "0.0.0.0:9010"
 EOF
 
-# Deploy BigQuery emulator (using mock for now)
-# NOTE: Skipped - ghcr.io/goccy/bigquery-emulator:latest doesn't support ARM64
-# The pipeline uses Iceberg sink, so BigQuery emulator is not required
-echo "2. Skipping BigQuery emulator (not needed for Iceberg sink)..."
+# Deploy MinIO
+echo "2. Deploying MinIO..."
+kubectl apply -f - << 'EOF'
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  namespace: default
+spec:
+  selector:
+    app: minio
+  ports:
+  - name: api
+    port: 9000
+    targetPort: 9301
+  - name: console
+    port: 9400
+    targetPort: 9400
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    app: minio
+  template:
+    metadata:
+      labels:
+        app: minio
+    spec:
+      containers:
+      - name: minio
+        image: quay.io/minio/minio:latest
+        command:
+        - server
+        - "--address"
+        - "0.0.0.0:9301"
+        - "--console-address"
+        - "0.0.0.0:9400"
+        - /data
+        env:
+        - name: MINIO_ROOT_USER
+          value: "minioadmin"
+        - name: MINIO_ROOT_PASSWORD
+          value: "minioadmin"
+        ports:
+        - containerPort: 9301
+        - containerPort: 9400
+        volumeMounts:
+        - name: minio-data
+          mountPath: /data
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+      volumes:
+      - name: minio-data
+        emptyDir: {}
+EOF
+
+# Create MinIO buckets
+echo "2.1. Creating MinIO buckets..."
+kubectl run --rm minio-init --image=minio/mc --restart=Never --command='
+  /bin/sh -c "
+  until /usr/bin/mc alias set minio http://minio:9000 minioadmin minioadmin; do echo waiting...; sleep 1; done
+  /usr/bin/mc mb minio/hummock001 --ignore-existing
+  /usr/bin/mc mb minio/warehouse --ignore-existing
+  echo MinIO buckets initialized
+  "
+
+# Deploy Lakekeeper (replacing old iceberg-rest-catalog)
+echo "2.2. Deploying Lakekeeper..."
+kubectl apply -f deployments/02-lakekeeper-db.yaml
+kubectl apply -f deployments/02-lakekeeper-migrate.yaml
+kubectl apply -f deployments/02-lakekeeper.yaml
+kubectl apply -f deployments/02-lakekeeper-bootstrap.yaml
 
 # Deploy Flink cluster
 echo "3. Deploying Flink cluster..."

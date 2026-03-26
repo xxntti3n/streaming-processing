@@ -62,7 +62,8 @@ public class SpannerCdcPipeline {
         System.out.println("Starting Spanner to Iceberg CDC Pipeline...");
         System.out.println("Source: Spanner HTTP API at " + System.getenv().getOrDefault("SPANNER_EMULATOR_HOST", "spanner-emulator:9010"));
         System.out.println("Sink: Iceberg tables on MinIO (s3a://warehouse)");
-        System.out.println("Catalog: ICEBERG_CATALOG_URI=" + System.getenv().getOrDefault("ICEBERG_CATALOG_URI", "http://iceberg-rest-catalog:8181"));
+        System.out.println("Catalog: " + System.getenv().getOrDefault("ICEBERG_CATALOG_URI",
+            System.getenv().getOrDefault("LAKEKEEPER_URI", "http://lakekeeper:8181")));
         System.out.println("State backend: " + stateBackend);
         System.out.println("Checkpoint interval: " + checkpointInterval + "ms");
 

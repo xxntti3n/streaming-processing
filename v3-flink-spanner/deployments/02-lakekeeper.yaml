@@ -1,0 +1,72 @@
+# Lakekeeper - Iceberg REST Catalog Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: lakekeeper
+  namespace: default
+spec:
+  selector:
+    app: lakekeeper
+  ports:
+  - port: 8181
+    targetPort: 8181
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lakekeeper
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: lakekeeper
+  template:
+    metadata:
+      labels:
+        app: lakekeeper
+    spec:
+      containers:
+      - name: lakekeeper
+        image: quay.io/lakekeeper/catalog:latest-main
+        env:
+        - name: LAKEKEEPER__PG_ENCRYPTION_KEY
+          value: "This-is-NOT-Secure-for-production!"
+        - name: LAKEKEEPER__PG_DATABASE_URL_READ
+          value: postgresql://postgres:postgres@lakekeeper-db:5432/postgres
+        - name: LAKEKEEPER__PG_DATABASE_URL_WRITE
+          value: postgresql://postgres:postgres@lakekeeper-db:5432/postgres
+        - name: LAKEKEEPER__AUTHZ_BACKEND
+          value: allowall
+        ports:
+        - containerPort: 8181
+        envFrom:
+        - configMapRef:
+            optional: true
+            name: lakekeeper-config
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8181
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 10
+          successThreshold: 1
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8181
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 10
+          successThreshold: 1
+          failureThreshold: 3
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"

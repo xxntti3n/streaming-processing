@@ -139,7 +139,7 @@ Use the provided deployment script:
 This deploys:
 - Spanner emulator at `spanner-emulator:9010`
 - MinIO for S3-compatible storage at `minio:9000`
-- Iceberg REST catalog at `iceberg-rest-catalog:8181`
+- Lakekeeper REST catalog at `lakekeeper:8181`
 - Flink 1.19.1 cluster (JobManager + TaskManager)
 
 All components are deployed to the `default` namespace.
@@ -154,7 +154,8 @@ kubectl get pods -n default
 # NAME                                 READY   STATUS    RESTARTS   AGE
 # spanner-emulator-xxxxx               1/1     Running   0          2m
 # minio-xxxxx                          1/1     Running   0          2m
-# iceberg-rest-catalog-xxxxx           1/1     Running   0          2m
+# lakekeeper-db-xxxxx                   1/1     Running   0          2m
+# lakekeeper-xxxxx                      1/1     Running   0          2m
 # flink-jobmanager-xxxxx               1/1     Running   0          2m
 # flink-taskmanager-xxxxx              1/1     Running   0          2m
 ```
@@ -317,13 +318,13 @@ Checking Infrastructure...
 ✓ Service 'flink-jobmanager' exists
 ✓ Service 'flink-taskmanager' exists
 ✓ Service 'minio' exists
-✓ Service 'iceberg-rest-catalog' exists
+✓ Service 'lakekeeper' exists
 
 Checking Pods...
 --------------------------
 ✓ Pod with label 'app=spanner-emulator' is running
 ✓ Pod with label 'app=minio' is running
-✓ Pod with label 'app=iceberg-rest-catalog' is running
+✓ Pod with label 'app=lakekeeper' is running
 ✓ Pod with label 'app=flink,component=jobmanager' is running
 ✓ Pod with label 'app=flink,component=taskmanager' is running
 
@@ -361,7 +362,7 @@ kubectl port-forward svc/flink-jobmanager 8081:8081
 # Check: numRecordsIn, numRecordsOut, numSucceededCheckpoints
 
 # Check Iceberg catalog for tables
-kubectl exec -it deployment/iceberg-rest-catalog -- \
+kubectl exec -it deployment/lakekeeper -- \
   curl -s http://localhost:8181/v1/namespaces/ecommerce/tables
 
 # Query Iceberg tables via spark-sql or trino
@@ -385,7 +386,7 @@ kubectl logs -l app=spanner-emulator -f
 kubectl logs -l app=minio -f
 
 # Iceberg REST catalog logs
-kubectl logs -l app=iceberg-rest-catalog -f
+kubectl logs -l app=lakekeeper -f
 ```
 
 ## Configuration
@@ -395,7 +396,7 @@ kubectl logs -l app=iceberg-rest-catalog -f
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `SPANNER_EMULATOR_HOST` | `spanner-emulator:9010` | Spanner emulator host:port |
-| `ICEBERG_CATALOG_URI` | `http://iceberg-rest-catalog:8181` | Iceberg REST catalog endpoint |
+| `LAKEKEEPER_URI` | `http://lakekeeper:8181` | Lakekeeper Iceberg REST catalog endpoint |
 | `ICEBERG_WAREHOUSE` | `s3a://warehouse/` | MinIO S3 path for Iceberg data |
 | `MINIO_ENDPOINT` | `http://minio:9000` | MinIO endpoint for S3 storage |
 | `FLINK_STATE_BACKEND` | `file:///tmp/flink-checkpoints` | Checkpoint storage location |
@@ -621,7 +622,7 @@ For production deployments, consider:
    ```bash
    kubectl get svc spanner-emulator -o yaml
    kubectl get svc minio -o yaml
-   kubectl get svc iceberg-rest-catalog -o yaml
+   kubectl get svc lakekeeper -o yaml
    ```
 
 3. Test connectivity from Flink pods
@@ -633,7 +634,7 @@ For production deployments, consider:
      curl -v http://minio:9000
 
    kubectl exec deployment/flink-taskmanager -- \
-     curl -v http://iceberg-rest-catalog:8181
+     curl -v http://lakekeeper:8181
    ```
 
 4. Check network policies

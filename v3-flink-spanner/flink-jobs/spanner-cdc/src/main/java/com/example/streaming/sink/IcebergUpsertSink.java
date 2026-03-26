@@ -59,7 +59,8 @@ public class IcebergUpsertSink extends RichSinkFunction<ChangeRecord> {
     @Override
     public void open(org.apache.flink.configuration.Configuration parameters) {
         // Read environment variables in the TaskManager context
-        this.catalogUri = System.getenv().getOrDefault("ICEBERG_CATALOG_URI", "http://iceberg-rest-catalog:8181");
+        this.catalogUri = System.getenv().getOrDefault("ICEBERG_CATALOG_URI",
+            System.getenv().getOrDefault("LAKEKEEPER_URI", "http://lakekeeper:8181"));
         // Use s3a:// scheme for Hadoop FileIO compatibility
         this.warehousePath = System.getenv().getOrDefault("ICEBERG_WAREHOUSE", "s3a://warehouse");
         this.namespace = System.getenv().getOrDefault("ICEBERG_NAMESPACE", "ecommerce");
