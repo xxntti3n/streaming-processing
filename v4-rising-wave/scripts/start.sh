@@ -63,6 +63,15 @@ echo ""
 
 docker exec -i risingwave psql -h localhost -p 4566 -d dev < sql/02-risingwave-cdc.sql
 
+# Apply streaming transformations
+echo -e "${YELLOW}Creating streaming analytics transformations...${NC}"
+docker exec -i risingwave psql -h localhost -p 4566 -d dev < sql/04-streaming-transforms.sql 2>/dev/null || echo "  (Note: Some transforms may already exist)"
+
+# Apply Iceberg sinks
+echo -e "${YELLOW}Creating Iceberg sinks for long-term storage...${NC}"
+sleep 3  # Wait for Lakekeeper to be fully ready
+docker exec -i risingwave psql -h localhost -p 4566 -d dev < sql/05-iceberg-sinks.sql 2>/dev/null || echo "  (Note: Some sinks may already exist)"
+
 # Force a checkpoint to flush data
 echo -e "${YELLOW}Flushing initial checkpoint...${NC}"
 docker exec risingwave psql -h localhost -p 4566 -d dev -c "FLUSH;"
@@ -77,8 +86,15 @@ echo "  - RisingWave SQL: localhost:4566"
 echo "  - RisingWave UI:  http://localhost:5691"
 echo "  - MinIO API:      http://localhost:9301"
 echo "  - MinIO Console:  http://localhost:9400"
+echo "  - Lakekeeper:     http://localhost:8181"
+echo ""
+echo "Data Flow:"
+echo "  PostgreSQL CDC → RisingWave → JDBC Sink (real-time)"
+echo "  PostgreSQL CDC → RisingWave → Iceberg Sink (MinIO)"
 echo ""
 echo "Commands:"
-echo "  - Verify: ./scripts/verify.sh"
-echo "  - Stop:   ./scripts/stop.sh"
+echo "  - Verify:   ./scripts/verify.sh"
+echo "  - Analytics:./scripts/query-analytics.sh"
+echo "  - Test:     ./scripts/insert-test-data.sh"
+echo "  - Stop:     ./scripts/stop.sh"
 echo ""
