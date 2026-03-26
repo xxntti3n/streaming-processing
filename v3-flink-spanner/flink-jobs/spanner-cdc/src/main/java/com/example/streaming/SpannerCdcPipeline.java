@@ -22,15 +22,20 @@ public class SpannerCdcPipeline {
         final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
         // Enable checkpointing for exactly-once semantics
-        env.enableCheckpointing(5000); // 5 second checkpoints
+        // Configurable via FLINK_CHECKPOINT_INTERVAL_MS environment variable (default: 1000ms)
+        long checkpointInterval = Long.parseLong(
+            System.getenv().getOrDefault("FLINK_CHECKPOINT_INTERVAL_MS", "1000")
+        );
+        env.enableCheckpointing(checkpointInterval);
 
         // Configure checkpoint behavior
         env.getCheckpointConfig().setCheckpointingMode(
             org.apache.flink.streaming.api.CheckpointingMode.EXACTLY_ONCE
         );
-        env.getCheckpointConfig().setMinPauseBetweenCheckpoints(1000);
-        env.getCheckpointConfig().setCheckpointTimeout(60000);
+        env.getCheckpointConfig().setMinPauseBetweenCheckpoints(500); // Allow more frequent checkpoints
+        env.getCheckpointConfig().setCheckpointTimeout(30000); // Faster timeout
         env.getCheckpointConfig().setMaxConcurrentCheckpoints(1);
+        env.getCheckpointConfig().setTolerableCheckpointFailureNumber(2); // Allow transient failures
 
         // Configure state backend (use filesystem for local/minikube)
         String stateBackend = System.getenv().getOrDefault("FLINK_STATE_BACKEND", "file:///tmp/flink-checkpoints");
@@ -59,6 +64,7 @@ public class SpannerCdcPipeline {
         System.out.println("Sink: Iceberg tables on MinIO (s3a://warehouse)");
         System.out.println("Catalog: ICEBERG_CATALOG_URI=" + System.getenv().getOrDefault("ICEBERG_CATALOG_URI", "http://iceberg-rest-catalog:8181"));
         System.out.println("State backend: " + stateBackend);
+        System.out.println("Checkpoint interval: " + checkpointInterval + "ms");
 
         env.execute("spanner-cdc-iceberg");
     }
